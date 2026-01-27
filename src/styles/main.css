@@ -1282,6 +1282,14 @@ body {
     text-decoration: underline;
 }
 
+.db-connector-tip .tip-download {
+    margin-left: 12px;
+    padding: 4px 10px;
+    background: rgba(0, 168, 107, 0.2);
+    border-radius: 4px;
+    font-size: 12px;
+}
+
 .bastion-step {
     display: flex;
     align-items: center;
