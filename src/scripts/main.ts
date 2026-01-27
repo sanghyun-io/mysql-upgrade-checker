@@ -315,11 +315,12 @@ document.body.appendChild(folderInput);
 };
 
 (window as any).analyzeFiles = async () => {
-  // Initialize streaming mode for real-time issue display
-  uiManager.initializeStreamingMode();
+  // Show progress first, then initialize streaming mode
+  // (showProgress hides resultsSection, so we must call initializeStreamingMode after)
   uiManager.showProgress();
+  uiManager.initializeStreamingMode();
 
-  // Run analysis - events will be emitted for each issue
+  // Run analysis - callbacks will be invoked for each issue
   analysisResults = await fileAnalyzer.analyzeFiles(uploadedFiles);
 
   // Finalize UI
