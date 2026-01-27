@@ -181,7 +181,7 @@ if (serverResultInput) {
   });
 }
 
-function analyzeServerResult(content: string, fileName: string): void {
+function analyzeServerResult(content: string, _fileName: string): void {
   // Try to parse as JSON first
   let data: any;
   try {
@@ -227,7 +227,6 @@ function parseTextResult(content: string): any {
   const lines = content.split('\n').filter((l) => l.trim());
   const results: any[] = [];
 
-  let currentSection = '';
   for (const line of lines) {
     if (line.startsWith('check_type\t')) {
       continue; // Skip header
