@@ -1252,6 +1252,36 @@ body {
     padding-left: 4px;
 }
 
+.db-connector-tip {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 16px;
+    background: rgba(0, 168, 107, 0.1);
+    border: 1px solid rgba(0, 168, 107, 0.3);
+    border-radius: 8px;
+    margin-bottom: 20px;
+}
+
+.db-connector-tip .tip-icon {
+    font-size: 18px;
+}
+
+.db-connector-tip .tip-text {
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+
+.db-connector-tip a {
+    color: var(--success);
+    font-weight: 600;
+    text-decoration: none;
+}
+
+.db-connector-tip a:hover {
+    text-decoration: underline;
+}
+
 .bastion-step {
     display: flex;
     align-items: center;
