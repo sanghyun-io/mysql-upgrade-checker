@@ -24,4 +24,5 @@ build/
 
 # Logs
 *.log
-*.example.{txt,json}
+*.example.txt
+*.example.json
