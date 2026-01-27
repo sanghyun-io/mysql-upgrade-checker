@@ -557,6 +557,25 @@
         @keyframes spin {
             to { transform: rotate(360deg); }
         }
+
+        .footer {
+            text-align: center;
+            padding: 40px 20px;
+            margin-top: 60px;
+            border-top: 1px solid var(--border);
+            color: var(--text-secondary);
+            font-size: 14px;
+        }
+
+        .footer a {
+            color: var(--accent-blue);
+            text-decoration: none;
+            transition: color 0.2s;
+        }
+
+        .footer a:hover {
+            color: var(--accent-purple);
+        }
     </style>
 </head>
 <body>
@@ -633,6 +652,16 @@
                     🔧 모든 수정 쿼리 다운로드 (SQL)
                 </button>
             </div>
+        </div>
+
+        <div class="footer">
+            <p>
+                MIT Licensed | Copyright © 2026 <a href="https://github.com/sanghyun-io" target="_blank">sanghyun-io</a>
+            </p>
+            <p style="margin-top: 8px;">
+                <a href="https://github.com/sanghyun-io/mysql-upgrade-checker" target="_blank">GitHub</a> •
+                <a href="https://github.com/sanghyun-io/mysql-upgrade-checker/blob/main/LICENSE" target="_blank">License</a>
+            </p>
         </div>
     </div>
 
