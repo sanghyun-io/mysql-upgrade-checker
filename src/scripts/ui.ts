@@ -1,12 +1,15 @@
 /**
  * MySQL 8.0 → 8.4 Upgrade Checker - UI Manager
- * Handles result display with category grouping
+ * Handles result display with category grouping and real-time streaming
  */
 
-import type { AnalysisResults, Issue, RuleCategory, GroupedIssues } from './types';
+import type { AnalysisResults, Issue, RuleCategory, GroupedIssues, Severity } from './types';
 import { CATEGORY_LABELS, CATEGORY_DESCRIPTIONS, CATEGORY_ORDER } from './types';
 import { TOTAL_RULE_COUNT } from './rules';
 import { showError } from './toast';
+
+// Severity order for sorting (error first, then warning, then info)
+const SEVERITY_ORDER: Record<Severity, number> = { error: 0, warning: 1, info: 2 };
 
 export class UIManager {
   private progressSection: HTMLElement;
@@ -14,6 +17,12 @@ export class UIManager {
   private progressBar: HTMLElement;
   private progressText: HTMLElement;
   private issuesContainer: HTMLElement;
+
+  // Streaming mode state
+  private streamingMode: boolean = false;
+  private currentIssues: Issue[] = [];
+  private currentGroups: Map<RuleCategory, HTMLElement> = new Map();
+  private categoryNav: HTMLElement | null = null;
 
   constructor() {
     this.progressSection = document.getElementById('progressSection')!;
@@ -59,6 +68,259 @@ export class UIManager {
 
     this.resultsSection.classList.add('show');
     this.resultsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  // ==========================================================================
+  // STREAMING MODE METHODS
+  // ==========================================================================
+
+  /**
+   * Initialize streaming mode for real-time issue display
+   */
+  initializeStreamingMode(): void {
+    this.streamingMode = true;
+    this.currentIssues = [];
+    this.currentGroups.clear();
+    this.categoryNav = null;
+
+    // Reset stats display
+    document.getElementById('safeCount')!.textContent = '—';
+    document.getElementById('errorCount')!.textContent = '0';
+    document.getElementById('warningCount')!.textContent = '0';
+    document.getElementById('infoCount')!.textContent = '0';
+
+    // Initialize container with streaming layout
+    this.issuesContainer.innerHTML = `
+      <div class="results-summary streaming">
+        <h3>분석 중...</h3>
+        <p>총 <span id="liveIssueCount">0</span>개의 문제 발견</p>
+        <p class="rule-count">(${TOTAL_RULE_COUNT}개 규칙 검사 중)</p>
+      </div>
+      <div class="category-nav" id="liveCategoryNav"></div>
+    `;
+
+    this.categoryNav = document.getElementById('liveCategoryNav');
+    this.resultsSection.classList.add('show');
+  }
+
+  /**
+   * Add an issue in real-time during streaming mode
+   */
+  addIssueRealtime(issue: Issue): void {
+    if (!this.streamingMode) return;
+
+    this.currentIssues.push(issue);
+    this.updateStatsDisplay();
+
+    // Get or create category section
+    const category = issue.category || 'invalidObjects';
+    let section = this.currentGroups.get(category);
+
+    if (!section) {
+      section = this.createCategorySectionElement(category);
+      this.insertCategorySectionInOrder(section, category);
+      this.currentGroups.set(category, section);
+      this.updateCategoryNav();
+    }
+
+    // Create and insert issue element
+    const issueElement = this.htmlToElement(this.renderIssue(issue));
+    issueElement.classList.add('issue-enter');
+    this.insertIssueBySeverity(section, issueElement, issue.severity);
+
+    // Update category header counts
+    this.updateCategoryCounts(category);
+
+    // Trigger enter animation
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        issueElement.classList.add('issue-enter-active');
+      });
+    });
+  }
+
+  /**
+   * Finalize streaming mode and show final results
+   */
+  finalizeStreamingMode(results: AnalysisResults): void {
+    this.streamingMode = false;
+
+    // Update summary text
+    const summaryEl = this.issuesContainer.querySelector('.results-summary');
+    if (summaryEl) {
+      if (results.issues.length === 0) {
+        summaryEl.innerHTML = `
+          <div class="no-issues-icon">✅</div>
+          <h3>호환성 문제가 발견되지 않았습니다!</h3>
+          <p>분석한 덤프 파일은 MySQL 8.4로 업그레이드하는데 문제가 없어 보입니다.</p>
+          <p class="rule-count">(${TOTAL_RULE_COUNT}개의 호환성 규칙을 검사했으며, 실제 환경에서 추가 테스트를 권장합니다)</p>
+        `;
+        summaryEl.classList.add('no-issues-summary');
+      } else {
+        const categoryCount = this.currentGroups.size;
+        summaryEl.innerHTML = `
+          <h3>분석 결과 요약</h3>
+          <p>총 ${results.issues.length}개의 호환성 문제가 ${categoryCount}개 카테고리에서 발견되었습니다.</p>
+          <p class="rule-count">(${TOTAL_RULE_COUNT}개 규칙 검사 완료)</p>
+        `;
+      }
+      summaryEl.classList.remove('streaming');
+    }
+
+    // Update final stats
+    document.getElementById('safeCount')!.textContent =
+      results.issues.length === 0 ? '✓' : '—';
+  }
+
+  private updateStatsDisplay(): void {
+    const stats = {
+      error: this.currentIssues.filter(i => i.severity === 'error').length,
+      warning: this.currentIssues.filter(i => i.severity === 'warning').length,
+      info: this.currentIssues.filter(i => i.severity === 'info').length
+    };
+
+    document.getElementById('errorCount')!.textContent = String(stats.error);
+    document.getElementById('warningCount')!.textContent = String(stats.warning);
+    document.getElementById('infoCount')!.textContent = String(stats.info);
+
+    // Update live issue count
+    const liveCount = document.getElementById('liveIssueCount');
+    if (liveCount) {
+      liveCount.textContent = String(this.currentIssues.length);
+    }
+  }
+
+  private createCategorySectionElement(category: RuleCategory): HTMLElement {
+    const section = document.createElement('div');
+    section.className = 'category-section';
+    section.id = `category-${category}`;
+    section.innerHTML = `
+      <div class="category-header">
+        <h3 class="category-title">${CATEGORY_LABELS[category]}</h3>
+        <div class="category-counts">
+          <span class="count-badge error" data-count="error" style="display: none;">0 오류</span>
+          <span class="count-badge warning" data-count="warning" style="display: none;">0 경고</span>
+          <span class="count-badge info" data-count="info" style="display: none;">0 정보</span>
+        </div>
+      </div>
+      <p class="category-description">${CATEGORY_DESCRIPTIONS[category]}</p>
+      <div class="category-issues"></div>
+    `;
+    return section;
+  }
+
+  private insertCategorySectionInOrder(section: HTMLElement, category: RuleCategory): void {
+    const categoryIndex = CATEGORY_ORDER.indexOf(category);
+    const existingSections = this.issuesContainer.querySelectorAll('.category-section');
+
+    let insertBefore: HTMLElement | null = null;
+
+    for (const existing of existingSections) {
+      const existingCategory = existing.id.replace('category-', '') as RuleCategory;
+      const existingIndex = CATEGORY_ORDER.indexOf(existingCategory);
+      if (existingIndex > categoryIndex) {
+        insertBefore = existing as HTMLElement;
+        break;
+      }
+    }
+
+    if (insertBefore) {
+      this.issuesContainer.insertBefore(section, insertBefore);
+    } else {
+      this.issuesContainer.appendChild(section);
+    }
+  }
+
+  private insertIssueBySeverity(section: HTMLElement, issueElement: Element, severity: Severity): void {
+    const issuesContainer = section.querySelector('.category-issues');
+    if (!issuesContainer) return;
+
+    const severityOrder = SEVERITY_ORDER[severity];
+    const existingIssues = issuesContainer.querySelectorAll('.issue-card');
+
+    let insertBefore: Element | null = null;
+
+    for (const existing of existingIssues) {
+      const existingSeverity = existing.classList.contains('error')
+        ? 'error'
+        : existing.classList.contains('warning')
+        ? 'warning'
+        : 'info';
+      const existingOrder = SEVERITY_ORDER[existingSeverity as Severity];
+
+      if (existingOrder > severityOrder) {
+        insertBefore = existing;
+        break;
+      }
+    }
+
+    if (insertBefore) {
+      issuesContainer.insertBefore(issueElement, insertBefore);
+    } else {
+      issuesContainer.appendChild(issueElement);
+    }
+  }
+
+  private updateCategoryCounts(category: RuleCategory): void {
+    const section = this.currentGroups.get(category);
+    if (!section) return;
+
+    const categoryIssues = this.currentIssues.filter(i => (i.category || 'invalidObjects') === category);
+    const counts = {
+      error: categoryIssues.filter(i => i.severity === 'error').length,
+      warning: categoryIssues.filter(i => i.severity === 'warning').length,
+      info: categoryIssues.filter(i => i.severity === 'info').length
+    };
+
+    const errorBadge = section.querySelector('[data-count="error"]') as HTMLElement;
+    const warningBadge = section.querySelector('[data-count="warning"]') as HTMLElement;
+    const infoBadge = section.querySelector('[data-count="info"]') as HTMLElement;
+
+    if (errorBadge) {
+      errorBadge.textContent = `${counts.error} 오류`;
+      errorBadge.style.display = counts.error > 0 ? '' : 'none';
+    }
+    if (warningBadge) {
+      warningBadge.textContent = `${counts.warning} 경고`;
+      warningBadge.style.display = counts.warning > 0 ? '' : 'none';
+    }
+    if (infoBadge) {
+      infoBadge.textContent = `${counts.info} 정보`;
+      infoBadge.style.display = counts.info > 0 ? '' : 'none';
+    }
+  }
+
+  private updateCategoryNav(): void {
+    if (!this.categoryNav) return;
+
+    const navItems: string[] = [];
+    for (const category of CATEGORY_ORDER) {
+      if (this.currentGroups.has(category)) {
+        const categoryIssues = this.currentIssues.filter(i => (i.category || 'invalidObjects') === category);
+        const errorCount = categoryIssues.filter(i => i.severity === 'error').length;
+        const warningCount = categoryIssues.filter(i => i.severity === 'warning').length;
+        const infoCount = categoryIssues.filter(i => i.severity === 'info').length;
+
+        navItems.push(`
+          <a href="#category-${category}" class="category-nav-item">
+            <span class="category-nav-label">${CATEGORY_LABELS[category]}</span>
+            <span class="category-nav-count">
+              ${errorCount > 0 ? `<span class="count-error">${errorCount}</span>` : ''}
+              ${warningCount > 0 ? `<span class="count-warning">${warningCount}</span>` : ''}
+              ${infoCount > 0 ? `<span class="count-info">${infoCount}</span>` : ''}
+            </span>
+          </a>
+        `);
+      }
+    }
+
+    this.categoryNav.innerHTML = navItems.join('');
+  }
+
+  private htmlToElement(html: string): HTMLElement {
+    const template = document.createElement('template');
+    template.innerHTML = html.trim();
+    return template.content.firstChild as HTMLElement;
   }
 
   private renderNoIssues(): string {
