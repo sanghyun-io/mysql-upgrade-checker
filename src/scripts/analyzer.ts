@@ -7,12 +7,14 @@ import type {
   AnalysisResults,
   Issue,
   TableSchemas,
-  ConfigSection
+  ConfigSection,
+  AnalysisProgress,
+  FileAnalysisResult
 } from './types';
 import { compatibilityRules } from './rules';
 import { REMOVED_SYS_VARS_84 } from './constants';
 
-export class FileAnalyzer {
+export class FileAnalyzer extends EventTarget {
   private results: AnalysisResults = {
     issues: [],
     stats: { safe: 0, error: 0, warning: 0, info: 0 },
@@ -26,6 +28,32 @@ export class FileAnalyzer {
       dataIntegrity: 0
     }
   };
+
+  constructor() {
+    super();
+  }
+
+  // Event emission methods
+  private emitIssue(issue: Issue): void {
+    this.dispatchEvent(new CustomEvent('issue', { detail: issue }));
+  }
+
+  private emitProgress(progress: AnalysisProgress): void {
+    this.dispatchEvent(new CustomEvent('progress', { detail: progress }));
+  }
+
+  private emitFileComplete(result: FileAnalysisResult): void {
+    this.dispatchEvent(new CustomEvent('fileComplete', { detail: result }));
+  }
+
+  private emitAnalysisComplete(results: AnalysisResults): void {
+    this.dispatchEvent(new CustomEvent('analysisComplete', { detail: results }));
+  }
+
+  // Yield to UI thread for responsiveness
+  private yieldToUI(): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, 0));
+  }
 
   async analyzeFiles(files: File[]): Promise<AnalysisResults> {
     this.results = {
@@ -52,11 +80,66 @@ export class FileAnalyzer {
       }
     };
 
-    for (const file of files) {
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      const fileType = this.detectFileType(file.name);
+      const issueCountBefore = this.results.issues.length;
+
+      // Emit progress: analyzing
+      this.emitProgress({
+        currentFile: file.name,
+        currentFileIndex: i,
+        totalFiles: files.length,
+        fileType,
+        phase: fileType === 'skip' ? 'skipped' : 'analyzing'
+      });
+
+      // Yield to UI for responsiveness
+      await this.yieldToUI();
+
       await this.analyzeFile(file);
+
+      const issuesFound = this.results.issues.length - issueCountBefore;
+
+      // Emit file complete
+      this.emitFileComplete({
+        fileName: file.name,
+        fileType,
+        issuesFound,
+        skipped: fileType === 'skip'
+      });
+
+      // Emit progress: complete
+      this.emitProgress({
+        currentFile: file.name,
+        currentFileIndex: i,
+        totalFiles: files.length,
+        fileType,
+        phase: 'complete'
+      });
     }
 
+    // Emit analysis complete
+    this.emitAnalysisComplete(this.results);
+
     return this.results;
+  }
+
+  private detectFileType(fileName: string): string {
+    if (
+      fileName.startsWith('load-progress') ||
+      fileName.startsWith('dump-progress') ||
+      fileName === '@.done.json'
+    ) {
+      return 'skip';
+    }
+    if (fileName.toLowerCase().endsWith('.cnf') || fileName.toLowerCase().endsWith('.ini')) {
+      return 'config';
+    }
+    if (fileName.endsWith('.sql')) return 'sql';
+    if (fileName.endsWith('.json') && fileName.includes('@.')) return 'json';
+    if (fileName.endsWith('.tsv') || fileName.endsWith('.txt')) return 'tsv';
+    return 'unknown';
   }
 
   private async analyzeFile(file: File): Promise<void> {
@@ -590,6 +673,9 @@ export class FileAnalyzer {
       if (this.results.categoryStats && issue.category) {
         this.results.categoryStats[issue.category]++;
       }
+
+      // Emit issue event for real-time display
+      this.emitIssue(issue);
     }
   }
 
