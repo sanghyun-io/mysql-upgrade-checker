@@ -846,8 +846,8 @@ body {
 }
 
 .server-query-steps {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    display: flex;
+    flex-direction: column;
     gap: 24px;
     margin-bottom: 40px;
 }
@@ -1202,10 +1202,6 @@ body {
    Method Tabs (Mini tabs inside step cards)
    ============================================================================ */
 
-.step-card-wide {
-    grid-column: 1 / -1;
-}
-
 .method-tabs {
     display: flex;
     gap: 8px;
@@ -1296,10 +1292,6 @@ body {
     .step-card {
         flex-direction: column;
         text-align: center;
-    }
-
-    .step-card-wide {
-        grid-column: auto;
     }
 
     .method-tabs {
