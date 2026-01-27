@@ -61,14 +61,61 @@
                         </div>
                     </div>
 
-                    <div class="step-card">
+                    <div class="step-card step-card-wide">
                         <div class="step-number">2</div>
                         <div class="step-content">
                             <h3>서버에서 실행</h3>
-                            <p>MySQL 서버에서 쿼리를 실행하고 결과를 JSON으로 저장합니다.</p>
-                            <div class="code-block">
-                                <code>mysql -u root -p &lt; server_check.sql &gt; result.json</code>
-                                <button class="btn-copy-small" onclick="copyCommand(this)">복사</button>
+                            <p>MySQL 서버에서 쿼리를 실행하고 결과 파일을 저장합니다.</p>
+
+                            <!-- Mini tabs for connection method -->
+                            <div class="method-tabs">
+                                <button class="method-tab active" data-method="local">로컬 연결</button>
+                                <button class="method-tab" data-method="bastion">Bastion 경유</button>
+                            </div>
+
+                            <!-- Method: Local connection -->
+                            <div class="method-content active" id="method-local">
+                                <p class="method-desc">DB 서버에 직접 접근 가능한 경우</p>
+                                <div class="code-block">
+                                    <code>mysql -h your-db-host -u admin -p &lt; mysql84_server_check.sql &gt; result.txt</code>
+                                    <button class="btn-copy-small" onclick="copyCommand(this)">복사</button>
+                                </div>
+                            </div>
+
+                            <!-- Method: Bastion server -->
+                            <div class="method-content" id="method-bastion">
+                                <p class="method-desc">AWS RDS 등 Bastion 서버를 통해 접근하는 경우</p>
+
+                                <div class="bastion-step">
+                                    <span class="bastion-step-num">2-1</span>
+                                    <span class="bastion-step-label">Bastion에 SQL 파일 업로드</span>
+                                </div>
+                                <div class="code-block">
+                                    <code>scp mysql84_server_check.sql user@bastion-host:~/</code>
+                                    <button class="btn-copy-small" onclick="copyCommand(this)">복사</button>
+                                </div>
+
+                                <div class="bastion-step">
+                                    <span class="bastion-step-num">2-2</span>
+                                    <span class="bastion-step-label">Bastion에서 RDS 접속 및 실행</span>
+                                </div>
+                                <div class="code-block">
+                                    <code>ssh user@bastion-host</code>
+                                    <button class="btn-copy-small" onclick="copyCommand(this)">복사</button>
+                                </div>
+                                <div class="code-block" style="margin-top: 8px;">
+                                    <code>mysql -h rds-endpoint.amazonaws.com -u admin -p &lt; mysql84_server_check.sql &gt; result.txt</code>
+                                    <button class="btn-copy-small" onclick="copyCommand(this)">복사</button>
+                                </div>
+
+                                <div class="bastion-step">
+                                    <span class="bastion-step-num">2-3</span>
+                                    <span class="bastion-step-label">결과 파일 로컬로 다운로드</span>
+                                </div>
+                                <div class="code-block">
+                                    <code>scp user@bastion-host:~/result.txt ./</code>
+                                    <button class="btn-copy-small" onclick="copyCommand(this)">복사</button>
+                                </div>
                             </div>
                         </div>
                     </div>

@@ -471,8 +471,35 @@ function downloadBlob(blob: Blob, filename: string): void {
 }
 
 // ============================================================================
+// Method Tabs (inside Step 2)
+// ============================================================================
+function initializeMethodTabs(): void {
+  const methodTabs = document.querySelectorAll('.method-tab');
+  const methodContents = document.querySelectorAll('.method-content');
+
+  methodTabs.forEach((tab) => {
+    tab.addEventListener('click', () => {
+      const method = tab.getAttribute('data-method');
+      if (!method) return;
+
+      // Remove active from all tabs and contents
+      methodTabs.forEach((t) => t.classList.remove('active'));
+      methodContents.forEach((c) => c.classList.remove('active'));
+
+      // Activate clicked tab and corresponding content
+      tab.classList.add('active');
+      const content = document.getElementById(`method-${method}`);
+      if (content) {
+        content.classList.add('active');
+      }
+    });
+  });
+}
+
+// ============================================================================
 // Initialize on DOMContentLoaded
 // ============================================================================
 document.addEventListener('DOMContentLoaded', () => {
   initializeTabs();
+  initializeMethodTabs();
 });
