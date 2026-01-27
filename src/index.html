@@ -76,9 +76,36 @@
                             <!-- Method: Local connection -->
                             <div class="method-content active" id="method-local">
                                 <p class="method-desc">DB 서버에 직접 접근 가능한 경우</p>
-                                <div class="code-block">
-                                    <code>mysql -h your-db-host -u admin -p &lt; mysql84_server_check.sql &gt; result.txt</code>
-                                    <button class="btn-copy-small" onclick="copyCommand(this)">복사</button>
+                                <div class="code-block-wrapper">
+                                    <div class="code-block">
+                                        <code>mysql -h your-db-host -u admin -p &lt; mysql84_server_check.sql &gt; result.txt</code>
+                                        <button class="btn-copy-small" onclick="copyCommand(this)">복사</button>
+                                    </div>
+                                    <span class="cmd-info-btn">i
+                                        <div class="cmd-tooltip">
+                                            <div class="cmd-tooltip-title">mysql 명령어 옵션</div>
+                                            <div class="cmd-tooltip-item">
+                                                <span class="cmd-tooltip-option">-h</span>
+                                                <span class="cmd-tooltip-desc">MySQL 서버 호스트 주소 (예: localhost, 192.168.1.100)</span>
+                                            </div>
+                                            <div class="cmd-tooltip-item">
+                                                <span class="cmd-tooltip-option">-u</span>
+                                                <span class="cmd-tooltip-desc">접속할 사용자 이름</span>
+                                            </div>
+                                            <div class="cmd-tooltip-item">
+                                                <span class="cmd-tooltip-option">-p</span>
+                                                <span class="cmd-tooltip-desc">비밀번호 입력 프롬프트 표시</span>
+                                            </div>
+                                            <div class="cmd-tooltip-item">
+                                                <span class="cmd-tooltip-option">&lt; file.sql</span>
+                                                <span class="cmd-tooltip-desc">실행할 SQL 파일 (입력 리다이렉션)</span>
+                                            </div>
+                                            <div class="cmd-tooltip-item">
+                                                <span class="cmd-tooltip-option">&gt; result.txt</span>
+                                                <span class="cmd-tooltip-desc">결과를 저장할 파일 (출력 리다이렉션)</span>
+                                            </div>
+                                        </div>
+                                    </span>
                                 </div>
                             </div>
 
@@ -98,31 +125,119 @@
                                     <span class="bastion-step-num">2-1</span>
                                     <span class="bastion-step-label">Bastion에 SQL 파일 업로드</span>
                                 </div>
-                                <div class="code-block">
-                                    <code>scp mysql84_server_check.sql user@bastion-host:~/</code>
-                                    <button class="btn-copy-small" onclick="copyCommand(this)">복사</button>
+                                <div class="code-block-wrapper">
+                                    <div class="code-block">
+                                        <code>scp mysql84_server_check.sql user@bastion-host:~/</code>
+                                        <button class="btn-copy-small" onclick="copyCommand(this)">복사</button>
+                                    </div>
+                                    <span class="cmd-info-btn">i
+                                        <div class="cmd-tooltip">
+                                            <div class="cmd-tooltip-title">scp 명령어 (파일 업로드)</div>
+                                            <div class="cmd-tooltip-item">
+                                                <span class="cmd-tooltip-option">scp</span>
+                                                <span class="cmd-tooltip-desc">Secure Copy - SSH를 통한 파일 전송</span>
+                                            </div>
+                                            <div class="cmd-tooltip-item">
+                                                <span class="cmd-tooltip-option">file.sql</span>
+                                                <span class="cmd-tooltip-desc">전송할 로컬 파일 경로</span>
+                                            </div>
+                                            <div class="cmd-tooltip-item">
+                                                <span class="cmd-tooltip-option">user@host</span>
+                                                <span class="cmd-tooltip-desc">원격 서버의 사용자@호스트</span>
+                                            </div>
+                                            <div class="cmd-tooltip-item">
+                                                <span class="cmd-tooltip-option">:~/</span>
+                                                <span class="cmd-tooltip-desc">원격 서버의 홈 디렉토리에 저장</span>
+                                            </div>
+                                        </div>
+                                    </span>
                                 </div>
 
                                 <div class="bastion-step">
                                     <span class="bastion-step-num">2-2</span>
                                     <span class="bastion-step-label">Bastion에서 RDS 접속 및 실행</span>
                                 </div>
-                                <div class="code-block">
-                                    <code>ssh user@bastion-host</code>
-                                    <button class="btn-copy-small" onclick="copyCommand(this)">복사</button>
+                                <div class="code-block-wrapper">
+                                    <div class="code-block">
+                                        <code>ssh user@bastion-host</code>
+                                        <button class="btn-copy-small" onclick="copyCommand(this)">복사</button>
+                                    </div>
+                                    <span class="cmd-info-btn">i
+                                        <div class="cmd-tooltip">
+                                            <div class="cmd-tooltip-title">ssh 명령어</div>
+                                            <div class="cmd-tooltip-item">
+                                                <span class="cmd-tooltip-option">ssh</span>
+                                                <span class="cmd-tooltip-desc">Secure Shell - 원격 서버 접속</span>
+                                            </div>
+                                            <div class="cmd-tooltip-item">
+                                                <span class="cmd-tooltip-option">user@host</span>
+                                                <span class="cmd-tooltip-desc">접속할 사용자@호스트 주소</span>
+                                            </div>
+                                        </div>
+                                    </span>
                                 </div>
-                                <div class="code-block" style="margin-top: 8px;">
-                                    <code>mysql -h rds-endpoint.amazonaws.com -u admin -p &lt; mysql84_server_check.sql &gt; result.txt</code>
-                                    <button class="btn-copy-small" onclick="copyCommand(this)">복사</button>
+                                <div class="code-block-wrapper" style="margin-top: 8px;">
+                                    <div class="code-block">
+                                        <code>mysql -h rds-endpoint.amazonaws.com -u admin -p &lt; mysql84_server_check.sql &gt; result.txt</code>
+                                        <button class="btn-copy-small" onclick="copyCommand(this)">복사</button>
+                                    </div>
+                                    <span class="cmd-info-btn">i
+                                        <div class="cmd-tooltip">
+                                            <div class="cmd-tooltip-title">mysql 명령어 옵션</div>
+                                            <div class="cmd-tooltip-item">
+                                                <span class="cmd-tooltip-option">-h</span>
+                                                <span class="cmd-tooltip-desc">RDS 엔드포인트 주소</span>
+                                            </div>
+                                            <div class="cmd-tooltip-item">
+                                                <span class="cmd-tooltip-option">-u</span>
+                                                <span class="cmd-tooltip-desc">RDS 마스터 사용자 이름</span>
+                                            </div>
+                                            <div class="cmd-tooltip-item">
+                                                <span class="cmd-tooltip-option">-p</span>
+                                                <span class="cmd-tooltip-desc">비밀번호 입력 프롬프트 표시</span>
+                                            </div>
+                                            <div class="cmd-tooltip-item">
+                                                <span class="cmd-tooltip-option">&lt; file.sql</span>
+                                                <span class="cmd-tooltip-desc">실행할 SQL 파일</span>
+                                            </div>
+                                            <div class="cmd-tooltip-item">
+                                                <span class="cmd-tooltip-option">&gt; result.txt</span>
+                                                <span class="cmd-tooltip-desc">결과 저장 파일</span>
+                                            </div>
+                                        </div>
+                                    </span>
                                 </div>
 
                                 <div class="bastion-step">
                                     <span class="bastion-step-num">2-3</span>
                                     <span class="bastion-step-label">결과 파일 로컬로 다운로드</span>
                                 </div>
-                                <div class="code-block">
-                                    <code>scp user@bastion-host:~/result.txt ./</code>
-                                    <button class="btn-copy-small" onclick="copyCommand(this)">복사</button>
+                                <div class="code-block-wrapper">
+                                    <div class="code-block">
+                                        <code>scp user@bastion-host:~/result.txt ./</code>
+                                        <button class="btn-copy-small" onclick="copyCommand(this)">복사</button>
+                                    </div>
+                                    <span class="cmd-info-btn">i
+                                        <div class="cmd-tooltip">
+                                            <div class="cmd-tooltip-title">scp 명령어 (파일 다운로드)</div>
+                                            <div class="cmd-tooltip-item">
+                                                <span class="cmd-tooltip-option">scp</span>
+                                                <span class="cmd-tooltip-desc">Secure Copy - SSH를 통한 파일 전송</span>
+                                            </div>
+                                            <div class="cmd-tooltip-item">
+                                                <span class="cmd-tooltip-option">user@host:</span>
+                                                <span class="cmd-tooltip-desc">원격 서버의 사용자@호스트</span>
+                                            </div>
+                                            <div class="cmd-tooltip-item">
+                                                <span class="cmd-tooltip-option">~/result.txt</span>
+                                                <span class="cmd-tooltip-desc">다운로드할 원격 파일 경로</span>
+                                            </div>
+                                            <div class="cmd-tooltip-item">
+                                                <span class="cmd-tooltip-option">./</span>
+                                                <span class="cmd-tooltip-desc">현재 디렉토리에 저장</span>
+                                            </div>
+                                        </div>
+                                    </span>
                                 </div>
                             </div>
                         </div>

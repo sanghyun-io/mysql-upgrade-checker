@@ -226,6 +226,8 @@ function analyzeServerResult(content: string, _fileName: string): void {
     const dumpTab = document.querySelector('.tab-btn[data-tab="dump-analysis"]') as HTMLElement;
     if (dumpTab) dumpTab.click();
 
+    // Update global analysisResults for export functionality
+    analysisResults = serverResults;
     uiManager.displayResults(serverResults);
     showInfo(`서버 검사 완료: ${serverIssues.length}개의 문제가 발견되었습니다.`);
   }

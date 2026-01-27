@@ -1695,3 +1695,122 @@ body {
         padding: 16px;
     }
 }
+
+/* ============================================================================
+   Command Tooltip Styles
+   ============================================================================ */
+
+.code-block-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.code-block-wrapper .code-block {
+    flex: 1;
+}
+
+.cmd-info-btn {
+    position: relative;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: 50%;
+    color: var(--text-secondary);
+    font-size: 12px;
+    font-weight: 700;
+    cursor: help;
+    flex-shrink: 0;
+    transition: all 0.2s;
+}
+
+.cmd-info-btn:hover {
+    background: var(--accent-blue);
+    border-color: var(--accent-blue);
+    color: white;
+}
+
+.cmd-tooltip {
+    position: absolute;
+    bottom: calc(100% + 10px);
+    right: 0;
+    width: 320px;
+    padding: 16px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(10px);
+    transition: all 0.2s ease;
+    z-index: 100;
+    text-align: left;
+}
+
+.cmd-info-btn:hover .cmd-tooltip {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+}
+
+.cmd-tooltip::after {
+    content: '';
+    position: absolute;
+    bottom: -8px;
+    right: 16px;
+    width: 0;
+    height: 0;
+    border-left: 8px solid transparent;
+    border-right: 8px solid transparent;
+    border-top: 8px solid var(--bg-card);
+}
+
+.cmd-tooltip-title {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+}
+
+.cmd-tooltip-item {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 8px;
+    font-size: 12px;
+    line-height: 1.4;
+}
+
+.cmd-tooltip-item:last-child {
+    margin-bottom: 0;
+}
+
+.cmd-tooltip-option {
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--accent-blue);
+    white-space: nowrap;
+    flex-shrink: 0;
+    min-width: 80px;
+}
+
+.cmd-tooltip-desc {
+    color: var(--text-secondary);
+}
+
+/* Tooltip Responsive */
+@media (max-width: 768px) {
+    .cmd-tooltip {
+        width: 280px;
+        right: -10px;
+    }
+
+    .cmd-tooltip::after {
+        right: 20px;
+    }
+}
