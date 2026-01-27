@@ -1814,3 +1814,89 @@ body {
         right: 20px;
     }
 }
+
+/* ============================================================================
+   Real-time Analysis Animations
+   ============================================================================ */
+
+/* Issue card enter animation */
+.issue-enter {
+    opacity: 0;
+    transform: translateY(-10px);
+}
+
+.issue-enter-active {
+    opacity: 1;
+    transform: translateY(0);
+    transition: opacity 0.3s ease-out, transform 0.3s ease-out;
+}
+
+/* Category section fade-in animation */
+.category-section {
+    animation: categoryFadeIn 0.3s ease-out;
+}
+
+@keyframes categoryFadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(-5px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Streaming mode summary pulsing effect */
+.results-summary.streaming h3 {
+    animation: pulsing 1.5s ease-in-out infinite;
+}
+
+@keyframes pulsing {
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.6;
+    }
+}
+
+/* Live issue count highlight */
+#liveIssueCount {
+    font-weight: 800;
+    color: var(--accent-blue);
+    transition: transform 0.2s ease;
+}
+
+/* No issues summary styling */
+.no-issues-summary {
+    text-align: center;
+    padding: 60px 40px;
+}
+
+.no-issues-summary .no-issues-icon {
+    font-size: 64px;
+    margin-bottom: 16px;
+}
+
+.no-issues-summary h3 {
+    color: var(--success) !important;
+    -webkit-text-fill-color: var(--success) !important;
+    background: none !important;
+}
+
+/* Category nav item animation */
+.category-nav-item {
+    animation: navItemFadeIn 0.2s ease-out;
+}
+
+@keyframes navItemFadeIn {
+    from {
+        opacity: 0;
+        transform: scale(0.95);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}

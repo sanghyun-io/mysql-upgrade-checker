@@ -1,6 +1,6 @@
 import { FileAnalyzer } from './analyzer';
 import { UIManager, copyToClipboard } from './ui';
-import type { AnalysisResults } from './types';
+import type { AnalysisResults, Issue, AnalysisProgress } from './types';
 import { CHECK_GUIDE, SERVER_REQUIRED_CHECKS, COMBINED_SERVER_CHECK_QUERY } from './constants';
 import { showSuccess, showError, showInfo } from './toast';
 
@@ -315,24 +315,16 @@ document.body.appendChild(folderInput);
 };
 
 (window as any).analyzeFiles = async () => {
+  // Initialize streaming mode for real-time issue display
+  uiManager.initializeStreamingMode();
   uiManager.showProgress();
 
-  let processedFiles = 0;
-
-  for (const file of uploadedFiles) {
-    processedFiles++;
-    const fileType = detectFileType(file.name);
-    uiManager.updateProgress(processedFiles, uploadedFiles.length, file.name, fileType);
-
-    await new Promise((resolve) => setTimeout(resolve, 50));
-  }
-
+  // Run analysis - events will be emitted for each issue
   analysisResults = await fileAnalyzer.analyzeFiles(uploadedFiles);
 
+  // Finalize UI
   uiManager.hideProgress();
-  setTimeout(() => {
-    uiManager.displayResults(analysisResults);
-  }, 500);
+  uiManager.finalizeStreamingMode(analysisResults);
 };
 
 (window as any).resetAll = () => {
@@ -521,9 +513,32 @@ function initializeMethodTabs(): void {
 }
 
 // ============================================================================
+// Real-time Analysis Event Setup
+// ============================================================================
+function setupRealtimeAnalysis(): void {
+  // Handle real-time issue detection
+  fileAnalyzer.addEventListener('issue', (event) => {
+    const issue = (event as CustomEvent<Issue>).detail;
+    uiManager.addIssueRealtime(issue);
+  });
+
+  // Handle progress updates
+  fileAnalyzer.addEventListener('progress', (event) => {
+    const progress = (event as CustomEvent<AnalysisProgress>).detail;
+    uiManager.updateProgress(
+      progress.currentFileIndex + 1,
+      progress.totalFiles,
+      progress.currentFile,
+      progress.fileType
+    );
+  });
+}
+
+// ============================================================================
 // Initialize on DOMContentLoaded
 // ============================================================================
 document.addEventListener('DOMContentLoaded', () => {
   initializeTabs();
   initializeMethodTabs();
+  setupRealtimeAnalysis();
 });
