@@ -1,6 +1,7 @@
 import { FileAnalyzer } from './analyzer';
 import { UIManager, copyToClipboard } from './ui';
 import type { AnalysisResults } from './types';
+import { CHECK_GUIDE, SERVER_REQUIRED_CHECKS, COMBINED_SERVER_CHECK_QUERY } from './constants';
 
 let uploadedFiles: File[] = [];
 let analysisResults: AnalysisResults = {
@@ -10,6 +11,280 @@ let analysisResults: AnalysisResults = {
 
 const fileAnalyzer = new FileAnalyzer();
 const uiManager = new UIManager();
+
+// ============================================================================
+// Tab Navigation
+// ============================================================================
+function initializeTabs(): void {
+  const tabBtns = document.querySelectorAll('.tab-btn');
+  const tabContents = document.querySelectorAll('.tab-content');
+
+  tabBtns.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const tabId = btn.getAttribute('data-tab');
+      if (!tabId) return;
+
+      // Remove active from all tabs
+      tabBtns.forEach((b) => b.classList.remove('active'));
+      tabContents.forEach((c) => c.classList.remove('active'));
+
+      // Activate clicked tab
+      btn.classList.add('active');
+      const content = document.getElementById(`tab-${tabId}`);
+      if (content) {
+        content.classList.add('active');
+      }
+
+      // Initialize content if needed
+      if (tabId === 'check-guide') {
+        initializeCheckGuide();
+      } else if (tabId === 'server-query') {
+        initializeServerChecks();
+      }
+    });
+  });
+}
+
+// ============================================================================
+// Check Guide
+// ============================================================================
+let checkGuideInitialized = false;
+
+function initializeCheckGuide(): void {
+  if (checkGuideInitialized) return;
+  checkGuideInitialized = true;
+
+  const container = document.getElementById('checkGuideContent');
+  if (!container) return;
+
+  // Calculate stats
+  let totalChecks = 0;
+  let dumpChecks = 0;
+  let serverChecks = 0;
+
+  CHECK_GUIDE.forEach((category) => {
+    category.checks.forEach((check) => {
+      totalChecks++;
+      if (check.serverRequired) {
+        serverChecks++;
+      } else {
+        dumpChecks++;
+      }
+    });
+  });
+
+  // Update stats display
+  const totalEl = document.getElementById('totalChecksCount');
+  const dumpEl = document.getElementById('dumpChecksCount');
+  const serverEl = document.getElementById('serverChecksCount');
+  if (totalEl) totalEl.textContent = String(totalChecks);
+  if (dumpEl) dumpEl.textContent = String(dumpChecks);
+  if (serverEl) serverEl.textContent = String(serverChecks);
+
+  // Render categories
+  container.innerHTML = CHECK_GUIDE.map((category) => {
+    const isServerRequired = category.id === 'serverRequired';
+    return `
+      <div class="guide-category ${isServerRequired ? 'server-required' : ''}" data-category="${category.id}">
+        <div class="guide-category-header" onclick="toggleCategory('${category.id}')">
+          <div class="guide-category-title">
+            <h3>${category.name}</h3>
+            <span class="guide-category-count">${category.checks.length}개</span>
+          </div>
+          <span class="guide-category-toggle">▼</span>
+        </div>
+        <div class="guide-category-desc">${category.description}</div>
+        <div class="guide-category-items">
+          ${category.checks.map((check) => `
+            <div class="guide-item">
+              <span class="guide-item-badge ${check.severity}">${check.severity.toUpperCase()}</span>
+              <div class="guide-item-content">
+                <div class="guide-item-name">
+                  ${check.name}
+                  ${check.serverRequired ? '<span class="server-badge">서버 필요</span>' : ''}
+                </div>
+                <div class="guide-item-desc">${check.description}</div>
+                ${check.mysqlShellCheckId ? `<div class="guide-item-id">ID: ${check.mysqlShellCheckId}</div>` : ''}
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+(window as any).toggleCategory = (categoryId: string) => {
+  const category = document.querySelector(`.guide-category[data-category="${categoryId}"]`);
+  if (category) {
+    category.classList.toggle('expanded');
+  }
+};
+
+// ============================================================================
+// Server Checks
+// ============================================================================
+let serverChecksInitialized = false;
+
+function initializeServerChecks(): void {
+  if (serverChecksInitialized) return;
+  serverChecksInitialized = true;
+
+  const container = document.getElementById('serverChecksList');
+  if (!container) return;
+
+  container.innerHTML = SERVER_REQUIRED_CHECKS.map((check) => `
+    <div class="server-check-item">
+      <h4>${check.name}</h4>
+      <p>${check.description}</p>
+    </div>
+  `).join('');
+}
+
+// ============================================================================
+// Server Query Functions
+// ============================================================================
+(window as any).downloadServerQuery = () => {
+  const content = COMBINED_SERVER_CHECK_QUERY;
+  downloadText(content, 'mysql84_server_check.sql');
+};
+
+(window as any).copyCommand = (button: HTMLButtonElement) => {
+  const codeBlock = button.parentElement;
+  const code = codeBlock?.querySelector('code');
+  if (code) {
+    navigator.clipboard.writeText(code.textContent || '').then(() => {
+      const originalText = button.textContent;
+      button.textContent = '복사됨!';
+      setTimeout(() => {
+        button.textContent = originalText;
+      }, 2000);
+    });
+  }
+};
+
+// Server result file upload handler
+const serverResultInput = document.getElementById('serverResultInput') as HTMLInputElement;
+if (serverResultInput) {
+  serverResultInput.addEventListener('change', async (e) => {
+    const target = e.target as HTMLInputElement;
+    if (target.files && target.files.length > 0) {
+      const file = target.files[0];
+      try {
+        const content = await file.text();
+        analyzeServerResult(content, file.name);
+      } catch (error) {
+        console.error('Failed to read server result file:', error);
+        alert('파일을 읽는 중 오류가 발생했습니다.');
+      }
+    }
+  });
+}
+
+function analyzeServerResult(content: string, fileName: string): void {
+  // Try to parse as JSON first
+  let data: any;
+  try {
+    data = JSON.parse(content);
+  } catch {
+    // If not JSON, try to parse as tab-separated or text
+    data = parseTextResult(content);
+  }
+
+  if (!data || Object.keys(data).length === 0) {
+    alert('파일 형식을 인식할 수 없습니다. JSON 또는 텍스트 형식으로 저장해주세요.');
+    return;
+  }
+
+  // Analyze the server result data
+  const serverIssues = processServerData(data);
+
+  if (serverIssues.length === 0) {
+    alert('서버 검사 결과: 문제가 발견되지 않았습니다!');
+  } else {
+    // Merge with existing results or display separately
+    const serverResults: AnalysisResults = {
+      issues: serverIssues,
+      stats: {
+        safe: serverIssues.length === 0 ? 1 : 0,
+        error: serverIssues.filter((i) => i.severity === 'error').length,
+        warning: serverIssues.filter((i) => i.severity === 'warning').length,
+        info: serverIssues.filter((i) => i.severity === 'info').length
+      }
+    };
+
+    // Switch to dump analysis tab and show results
+    const dumpTab = document.querySelector('.tab-btn[data-tab="dump-analysis"]') as HTMLElement;
+    if (dumpTab) dumpTab.click();
+
+    uiManager.displayResults(serverResults);
+    alert(`서버 검사 완료: ${serverIssues.length}개의 문제가 발견되었습니다.`);
+  }
+}
+
+function parseTextResult(content: string): any {
+  // Parse MySQL command-line output (tab-separated)
+  const lines = content.split('\n').filter((l) => l.trim());
+  const results: any[] = [];
+
+  let currentSection = '';
+  for (const line of lines) {
+    if (line.startsWith('check_type\t')) {
+      continue; // Skip header
+    }
+    const parts = line.split('\t');
+    if (parts.length >= 2) {
+      results.push({
+        check_type: parts[0],
+        data: parts.slice(1)
+      });
+    }
+  }
+
+  return { rows: results };
+}
+
+function processServerData(data: any): any[] {
+  const issues: any[] = [];
+
+  // Process user authentication data
+  if (data.user_auth || (data.rows && data.rows.some((r: any) => r.check_type === 'user_auth'))) {
+    const authData = data.user_auth || data.rows?.filter((r: any) => r.check_type === 'user_auth') || [];
+    for (const user of authData) {
+      const plugin = user.auth_plugin || user.plugin || user.data?.[2];
+      const userName = user.user_name || user.User || user.data?.[0];
+      const host = user.host || user.Host || user.data?.[1];
+
+      if (plugin === 'mysql_native_password') {
+        issues.push({
+          id: 'server_auth_native',
+          type: 'privilege',
+          category: 'authentication',
+          severity: 'error',
+          title: 'mysql_native_password 사용자 발견',
+          description: `사용자 '${userName}'@'${host}'가 mysql_native_password 플러그인을 사용하고 있습니다. MySQL 8.4에서 기본 비활성화됩니다.`,
+          suggestion: 'caching_sha2_password로 마이그레이션하세요: ALTER USER ... IDENTIFIED WITH caching_sha2_password BY ...',
+          location: `mysql.user: ${userName}@${host}`,
+          mysqlShellCheckId: 'authMethodUsage'
+        });
+      } else if (plugin === 'sha256_password') {
+        issues.push({
+          id: 'server_auth_sha256',
+          type: 'privilege',
+          category: 'authentication',
+          severity: 'warning',
+          title: 'sha256_password 사용자 발견 (폐기 예정)',
+          description: `사용자 '${userName}'@'${host}'가 sha256_password 플러그인을 사용하고 있습니다.`,
+          suggestion: 'caching_sha2_password로 마이그레이션을 권장합니다.',
+          location: `mysql.user: ${userName}@${host}`,
+          mysqlShellCheckId: 'deprecatedDefaultAuth'
+        });
+      }
+    }
+  }
+
+  return issues;
+}
 
 // DOM Elements
 const uploadSection = document.getElementById('uploadSection')!;
@@ -195,3 +470,10 @@ function downloadBlob(blob: Blob, filename: string): void {
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
 }
+
+// ============================================================================
+// Initialize on DOMContentLoaded
+// ============================================================================
+document.addEventListener('DOMContentLoaded', () => {
+  initializeTabs();
+});

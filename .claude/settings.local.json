@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx tsc:*)",
+      "Bash(echo:*)",
+      "Bash(npx vite build)",
+      "Bash(npm --version:*)",
+      "Bash(npm config list:*)",
+      "Bash(npm.cmd install:*)",
+      "Bash(npm.cmd run build:*)",
+      "Bash(grep:*)"
+    ]
+  }
+}

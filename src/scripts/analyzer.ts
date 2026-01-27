@@ -1,19 +1,54 @@
-import type { AnalysisResults, Issue, TableSchemas, TableSchema } from './types';
+/**
+ * MySQL 8.0 → 8.4 Upgrade Checker - File Analyzer
+ * Analyzes SQL files, config files, and data files for compatibility issues
+ */
+
+import type {
+  AnalysisResults,
+  Issue,
+  TableSchemas,
+  ConfigSection
+} from './types';
 import { compatibilityRules } from './rules';
+import { REMOVED_SYS_VARS_84 } from './constants';
 
 export class FileAnalyzer {
   private results: AnalysisResults = {
     issues: [],
-    stats: { safe: 0, error: 0, warning: 0, info: 0 }
+    stats: { safe: 0, error: 0, warning: 0, info: 0 },
+    categoryStats: {
+      removedSysVars: 0,
+      newDefaultVars: 0,
+      reservedKeywords: 0,
+      authentication: 0,
+      invalidPrivileges: 0,
+      invalidObjects: 0,
+      dataIntegrity: 0
+    }
   };
 
   async analyzeFiles(files: File[]): Promise<AnalysisResults> {
     this.results = {
       issues: [],
       stats: { safe: 0, error: 0, warning: 0, info: 0 },
+      categoryStats: {
+        removedSysVars: 0,
+        newDefaultVars: 0,
+        reservedKeywords: 0,
+        authentication: 0,
+        invalidPrivileges: 0,
+        invalidObjects: 0,
+        dataIntegrity: 0
+      },
       metadata: {
         totalFiles: files.length,
-        analyzedAt: new Date().toISOString()
+        analyzedAt: new Date().toISOString(),
+        fileTypes: {
+          sql: 0,
+          tsv: 0,
+          json: 0,
+          config: 0
+        }
       }
     };
 
@@ -27,8 +62,9 @@ export class FileAnalyzer {
   private async analyzeFile(file: File): Promise<void> {
     const content = await this.readFileContent(file);
     const fileName = file.name;
+    const lowerName = fileName.toLowerCase();
 
-    // mysqlsh dump 진행 상황 파일 건너뛰기
+    // Skip mysqlsh dump progress files
     if (
       fileName.startsWith('load-progress') ||
       fileName.startsWith('dump-progress') ||
@@ -37,20 +73,30 @@ export class FileAnalyzer {
       return;
     }
 
-    // mysqlsh dump 메타데이터 파일 처리
+    // MySQL config files (.cnf, .ini, my.cnf)
+    if (lowerName.endsWith('.cnf') || lowerName.endsWith('.ini') || lowerName === 'my.cnf') {
+      this.results.metadata!.fileTypes!.config++;
+      await this.analyzeConfigFile(content, fileName);
+      return;
+    }
+
+    // mysqlsh dump metadata files
     if (fileName.endsWith('.json') && fileName.includes('@.')) {
+      this.results.metadata!.fileTypes!.json++;
       await this.analyzeMysqlShellMetadata(content, fileName);
       return;
     }
 
-    // SQL 파일 분석
+    // SQL files
     if (fileName.endsWith('.sql')) {
+      this.results.metadata!.fileTypes!.sql++;
       await this.analyzeSQLFile(content, fileName);
       return;
     }
 
-    // TSV 파일
+    // TSV/TXT data files
     if (fileName.endsWith('.tsv') || fileName.endsWith('.txt')) {
+      this.results.metadata!.fileTypes!.tsv++;
       await this.analyzeTSVData(content, fileName);
       return;
     }
@@ -65,6 +111,105 @@ export class FileAnalyzer {
     });
   }
 
+  // ==========================================================================
+  // CONFIG FILE ANALYSIS (.cnf, .ini)
+  // ==========================================================================
+  private async analyzeConfigFile(content: string, fileName: string): Promise<void> {
+    const sections = this.parseConfigFile(content);
+
+    for (const section of sections) {
+      // Check each variable against removed system variables
+      for (const [key, value] of Object.entries(section.variables)) {
+        const normalizedKey = key.replace(/-/g, '_').toLowerCase();
+
+        // Check for removed system variables
+        if (REMOVED_SYS_VARS_84.some(v => v.toLowerCase() === normalizedKey)) {
+          const rule = compatibilityRules.find(r => r.id === 'removed_sys_var');
+          if (rule) {
+            this.addIssue({
+              ...rule,
+              location: `${fileName} [${section.name}]`,
+              code: `${key} = ${value}`,
+              variableName: key,
+              configSection: section.name,
+              fixQuery: rule.generateFixQuery?.({ variableName: key }) || null
+            });
+          }
+        }
+
+        // Check for obsolete SQL modes in sql_mode setting
+        if (normalizedKey === 'sql_mode') {
+          const rule = compatibilityRules.find(r => r.id === 'obsolete_sql_mode');
+          if (rule && rule.pattern?.test(`sql_mode=${value}`)) {
+            this.addIssue({
+              ...rule,
+              location: `${fileName} [${section.name}]`,
+              code: `${key} = ${value}`,
+              configSection: section.name
+            });
+          }
+        }
+
+        // Check for default_authentication_plugin
+        if (normalizedKey === 'default_authentication_plugin') {
+          const rule = compatibilityRules.find(r => r.id === 'default_authentication_plugin_var');
+          if (rule) {
+            this.addIssue({
+              ...rule,
+              location: `${fileName} [${section.name}]`,
+              code: `${key} = ${value}`,
+              configSection: section.name,
+              fixQuery: rule.generateFixQuery?.({}) || null
+            });
+          }
+        }
+      }
+    }
+  }
+
+  private parseConfigFile(content: string): ConfigSection[] {
+    const sections: ConfigSection[] = [];
+    let currentSection: ConfigSection = { name: 'global', variables: {} };
+
+    const lines = content.split('\n');
+    for (const line of lines) {
+      const trimmed = line.trim();
+
+      // Skip empty lines and comments
+      if (!trimmed || trimmed.startsWith('#') || trimmed.startsWith(';')) {
+        continue;
+      }
+
+      // Section header [mysqld], [mysql], etc.
+      const sectionMatch = trimmed.match(/^\[(\w+)\]$/);
+      if (sectionMatch) {
+        if (Object.keys(currentSection.variables).length > 0) {
+          sections.push(currentSection);
+        }
+        currentSection = { name: sectionMatch[1], variables: {} };
+        continue;
+      }
+
+      // Variable assignment: key=value or key = value
+      const varMatch = trimmed.match(/^([^=]+?)\s*=\s*(.*)$/);
+      if (varMatch) {
+        const key = varMatch[1].trim();
+        const value = varMatch[2].trim().replace(/^["']|["']$/g, '');
+        currentSection.variables[key] = value;
+      }
+    }
+
+    // Don't forget the last section
+    if (Object.keys(currentSection.variables).length > 0) {
+      sections.push(currentSection);
+    }
+
+    return sections;
+  }
+
+  // ==========================================================================
+  // MYSQL SHELL METADATA ANALYSIS
+  // ==========================================================================
   private async analyzeMysqlShellMetadata(content: string, fileName: string): Promise<void> {
     try {
       const metadata = JSON.parse(content);
@@ -87,44 +232,170 @@ export class FileAnalyzer {
     }
   }
 
+  // ==========================================================================
+  // SQL FILE ANALYSIS
+  // ==========================================================================
   private async analyzeSQLFile(content: string, fileName: string): Promise<void> {
-    // 스키마 검사
-    compatibilityRules
-      .filter((rule) => rule.type === 'schema' || rule.type === 'query')
-      .forEach((rule) => {
-        if (!rule.pattern) return;
+    // Schema and query rules (pattern-based)
+    this.analyzeWithPatternRules(content, fileName);
 
-        const matches = content.matchAll(rule.pattern);
-        const seen = new Set<string>();
+    // GRANT statement analysis
+    this.analyzeGrantStatements(content, fileName);
 
-        for (const match of matches) {
-          const context = this.extractContext(content, match.index || 0, 300);
-          const key = `${rule.id}-${context}`;
+    // CREATE USER statement analysis
+    this.analyzeCreateUserStatements(content, fileName);
 
-          if (!seen.has(key)) {
-            seen.add(key);
-
-            const issue: Issue = {
-              ...rule,
-              location: fileName,
-              code: context,
-              matchedText: match[0]
-            };
-
-            // 수정 쿼리 생성
-            if (rule.generateFixQuery) {
-              issue.fixQuery = rule.generateFixQuery({ code: context });
-            }
-
-            this.addIssue(issue);
-          }
-        }
-      });
-
-    // INSERT 문에서 데이터 검사
+    // INSERT statement data analysis
     this.analyzeInsertStatements(content, fileName);
   }
 
+  private analyzeWithPatternRules(content: string, fileName: string): void {
+    const patternRules = compatibilityRules.filter(
+      (rule) => rule.pattern && (rule.type === 'schema' || rule.type === 'query')
+    );
+
+    for (const rule of patternRules) {
+      if (!rule.pattern) continue;
+
+      // Reset regex lastIndex for global patterns
+      rule.pattern.lastIndex = 0;
+      const matches = content.matchAll(rule.pattern);
+      const seen = new Set<string>();
+
+      for (const match of matches) {
+        const context = this.extractContext(content, match.index || 0, 300);
+        const key = `${rule.id}-${context}`;
+
+        if (!seen.has(key)) {
+          seen.add(key);
+
+          const issue: Issue = {
+            ...rule,
+            location: fileName,
+            code: context,
+            matchedText: match[0]
+          };
+
+          // Generate fix query if available
+          if (rule.generateFixQuery) {
+            issue.fixQuery = rule.generateFixQuery({ code: context });
+          }
+
+          this.addIssue(issue);
+        }
+      }
+    }
+  }
+
+  // ==========================================================================
+  // GRANT STATEMENT ANALYSIS
+  // ==========================================================================
+  private analyzeGrantStatements(content: string, fileName: string): void {
+    // Match GRANT statements
+    const grantPattern = /GRANT\s+([^;]+?)\s+TO\s+['"]?([^'"@\s]+)['"]?(?:@['"]?([^'";\s]+)['"]?)?/gi;
+    const matches = content.matchAll(grantPattern);
+
+    for (const match of matches) {
+      const privileges = match[1];
+      const userName = match[2];
+      // const host = match[3] || '%';  // Available for future use
+
+      // Check for SUPER privilege
+      if (/\bSUPER\b/i.test(privileges)) {
+        const rule = compatibilityRules.find(r => r.id === 'super_privilege');
+        if (rule) {
+          this.addIssue({
+            ...rule,
+            location: fileName,
+            code: match[0],
+            userName: userName,
+            privilege: 'SUPER',
+            fixQuery: rule.generateFixQuery?.({ userName }) || null
+          });
+        }
+      }
+    }
+  }
+
+  // ==========================================================================
+  // CREATE USER STATEMENT ANALYSIS
+  // ==========================================================================
+  private analyzeCreateUserStatements(content: string, fileName: string): void {
+    // Match CREATE USER statements
+    const createUserPattern = /CREATE\s+USER\s+(?:IF\s+NOT\s+EXISTS\s+)?['"]?([^'"@\s]+)['"]?(?:@['"]?([^'";\s]+)['"]?)?\s*([^;]*)/gi;
+    const matches = content.matchAll(createUserPattern);
+
+    for (const match of matches) {
+      const userName = match[1];
+      const userOptions = match[3] || '';
+
+      // Check for mysql_native_password
+      if (/mysql_native_password/i.test(userOptions)) {
+        const rule = compatibilityRules.find(r => r.id === 'mysql_native_password');
+        if (rule) {
+          this.addIssue({
+            ...rule,
+            location: fileName,
+            code: match[0].substring(0, 200),
+            userName: userName,
+            fixQuery: rule.generateFixQuery?.({ userName }) || null
+          });
+        }
+      }
+
+      // Check for sha256_password
+      if (/sha256_password/i.test(userOptions)) {
+        const rule = compatibilityRules.find(r => r.id === 'sha256_password');
+        if (rule) {
+          this.addIssue({
+            ...rule,
+            location: fileName,
+            code: match[0].substring(0, 200),
+            userName: userName
+          });
+        }
+      }
+
+      // Check for authentication_fido
+      if (/authentication_fido/i.test(userOptions)) {
+        const rule = compatibilityRules.find(r => r.id === 'authentication_fido');
+        if (rule) {
+          this.addIssue({
+            ...rule,
+            location: fileName,
+            code: match[0].substring(0, 200),
+            userName: userName
+          });
+        }
+      }
+    }
+
+    // Also check ALTER USER statements
+    const alterUserPattern = /ALTER\s+USER\s+['"]?([^'"@\s]+)['"]?(?:@['"]?([^'";\s]+)['"]?)?\s*([^;]*)/gi;
+    const alterMatches = content.matchAll(alterUserPattern);
+
+    for (const match of alterMatches) {
+      const userName = match[1];
+      const userOptions = match[3] || '';
+
+      if (/mysql_native_password/i.test(userOptions)) {
+        const rule = compatibilityRules.find(r => r.id === 'mysql_native_password');
+        if (rule) {
+          this.addIssue({
+            ...rule,
+            location: fileName,
+            code: match[0].substring(0, 200),
+            userName: userName,
+            fixQuery: rule.generateFixQuery?.({ userName }) || null
+          });
+        }
+      }
+    }
+  }
+
+  // ==========================================================================
+  // INSERT STATEMENT DATA ANALYSIS
+  // ==========================================================================
   private analyzeInsertStatements(content: string, fileName: string): void {
     const tableSchemas = this.extractTableSchemas(content);
 
@@ -141,7 +412,7 @@ export class FileAnalyzer {
         : [];
       const schema = tableSchemas[tableName] || {};
 
-      // 0000-00-00 날짜 검사
+      // 0000-00-00 date check
       if (/['"]0000-00-00(?:\s+00:00:00)?['"]/i.test(valuesStr)) {
         const dateMatch = valuesStr.match(/['"]0000-00-00(\s+00:00:00)?['"]/i);
         if (dateMatch) {
@@ -166,7 +437,7 @@ export class FileAnalyzer {
         }
       }
 
-      // ENUM 빈 값 검사
+      // ENUM empty value check
       for (let i = 0; i < columns.length; i++) {
         const columnName = columns[i];
         const columnType = schema[columnName];
@@ -198,7 +469,7 @@ export class FileAnalyzer {
         }
       }
 
-      // utf8mb4 범위를 벗어나는 문자 검사
+      // 4-byte UTF-8 character check
       const has4ByteChars = /[\u{10000}-\u{10FFFF}]/u.test(valuesStr);
       if (has4ByteChars) {
         const rule = compatibilityRules.find((r) => r.id === 'data_4byte_chars');
@@ -213,7 +484,7 @@ export class FileAnalyzer {
         }
       }
 
-      // NULL 바이트 검사
+      // NULL byte check
       if (valuesStr.includes('\\0') || valuesStr.includes('\x00')) {
         const rule = compatibilityRules.find((r) => r.id === 'data_null_byte');
         if (rule) {
@@ -230,6 +501,40 @@ export class FileAnalyzer {
     }
   }
 
+  // ==========================================================================
+  // TSV DATA FILE ANALYSIS
+  // ==========================================================================
+  private async analyzeTSVData(content: string, fileName: string): Promise<void> {
+    const lines = content.split('\n');
+    const tableName = fileName.replace(/\.tsv$|\.txt$/, '').split('@')[0];
+
+    let lineNum = 0;
+    for (const line of lines.slice(0, 1000)) {
+      lineNum++;
+
+      // 4-byte character check
+      if (/[\u{10000}-\u{10FFFF}]/u.test(line)) {
+        this.addIssue({
+          id: 'data_4byte_chars',
+          type: 'data',
+          category: 'dataIntegrity',
+          severity: 'warning',
+          title: '4바이트 UTF-8 문자 발견 (데이터)',
+          description: `TSV 데이터에 이모지 또는 4바이트 UTF-8 문자가 포함되어 있습니다.`,
+          suggestion: '테이블 문자셋을 utf8mb4로 설정해야 합니다.',
+          location: `${fileName}:${lineNum}`,
+          code: line.substring(0, 100) + '...',
+          dataSample: line,
+          tableName: tableName
+        });
+        break;
+      }
+    }
+  }
+
+  // ==========================================================================
+  // HELPER METHODS
+  // ==========================================================================
   private extractTableSchemas(content: string): TableSchemas {
     const schemas: TableSchemas = {};
     const createTablePattern = /CREATE TABLE\s+`?(\w+)`?\s+\(([^;]+)\)/gi;
@@ -269,32 +574,6 @@ export class FileAnalyzer {
     return 0;
   }
 
-  private async analyzeTSVData(content: string, fileName: string): Promise<void> {
-    const lines = content.split('\n');
-    const tableName = fileName.replace(/\.tsv$|\.txt$/, '').split('@')[0];
-
-    let lineNum = 0;
-    for (const line of lines.slice(0, 1000)) {
-      lineNum++;
-
-      // 4바이트 문자 검사
-      if (/[\u{10000}-\u{10FFFF}]/u.test(line)) {
-        this.addIssue({
-          id: 'data_4byte_chars',
-          type: 'data',
-          severity: 'warning',
-          title: '4바이트 UTF-8 문자 발견 (데이터)',
-          description: `TSV 데이터에 이모지 또는 4바이트 UTF-8 문자가 포함되어 있습니다.`,
-          suggestion: '테이블 문자셋을 utf8mb4로 설정해야 합니다.',
-          location: `${fileName}:${lineNum}`,
-          code: line.substring(0, 100) + '...',
-          dataSample: line
-        });
-        break;
-      }
-    }
-  }
-
   private addIssue(issue: Issue): void {
     const isDuplicate = this.results.issues.some(
       (existing) =>
@@ -306,6 +585,11 @@ export class FileAnalyzer {
     if (!isDuplicate) {
       this.results.issues.push(issue);
       this.results.stats[issue.severity]++;
+
+      // Update category stats
+      if (this.results.categoryStats && issue.category) {
+        this.results.categoryStats[issue.category]++;
+      }
     }
   }
 

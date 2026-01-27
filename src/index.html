@@ -13,14 +13,103 @@
             <p>mysqlsh dump 폴더를 선택하여 호환성 문제를 사전에 발견하세요</p>
         </div>
 
-        <div class="upload-section" id="uploadSection">
-            <div class="upload-content">
-                <div class="upload-icon">📁</div>
-                <h2>mysqlsh dump 폴더를 선택하세요</h2>
-                <p>폴더 전체를 선택하면 자동으로 분석할 파일들을 감지합니다</p>
-                <button class="btn btn-primary" onclick="selectFolder()" style="margin-top: 20px;">
-                    📁 폴더 선택
-                </button>
+        <!-- Tab Navigation -->
+        <div class="tab-navigation">
+            <button class="tab-btn active" data-tab="dump-analysis">
+                📁 덤프 분석
+            </button>
+            <button class="tab-btn" data-tab="server-query">
+                🔌 서버 쿼리
+            </button>
+            <button class="tab-btn" data-tab="check-guide">
+                📋 검사 항목 안내
+            </button>
+        </div>
+
+        <!-- Tab: Dump Analysis -->
+        <div class="tab-content active" id="tab-dump-analysis">
+            <div class="upload-section" id="uploadSection">
+                <div class="upload-content">
+                    <div class="upload-icon">📁</div>
+                    <h2>mysqlsh dump 폴더를 선택하세요</h2>
+                    <p>폴더 전체를 선택하면 자동으로 분석할 파일들을 감지합니다</p>
+                    <button class="btn btn-primary" onclick="selectFolder()" style="margin-top: 20px;">
+                        📁 폴더 선택
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tab: Server Query -->
+        <div class="tab-content" id="tab-server-query">
+            <div class="server-query-section">
+                <div class="server-query-intro">
+                    <h2>🔌 서버 직접 검사</h2>
+                    <p>일부 검사 항목은 덤프 파일만으로는 확인할 수 없습니다.<br>
+                    아래 SQL 쿼리를 MySQL 서버에서 실행하고, 결과를 업로드하세요.</p>
+                </div>
+
+                <div class="server-query-steps">
+                    <div class="step-card">
+                        <div class="step-number">1</div>
+                        <div class="step-content">
+                            <h3>쿼리 다운로드</h3>
+                            <p>서버 검사용 SQL 쿼리를 다운로드합니다.</p>
+                            <button class="btn btn-secondary" onclick="downloadServerQuery()">
+                                📥 SQL 쿼리 다운로드
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="step-card">
+                        <div class="step-number">2</div>
+                        <div class="step-content">
+                            <h3>서버에서 실행</h3>
+                            <p>MySQL 서버에서 쿼리를 실행하고 결과를 JSON으로 저장합니다.</p>
+                            <div class="code-block">
+                                <code>mysql -u root -p &lt; server_check.sql &gt; result.json</code>
+                                <button class="btn-copy-small" onclick="copyCommand(this)">복사</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="step-card">
+                        <div class="step-number">3</div>
+                        <div class="step-content">
+                            <h3>결과 업로드</h3>
+                            <p>실행 결과 파일(JSON 또는 텍스트)을 업로드합니다.</p>
+                            <input type="file" id="serverResultInput" accept=".json,.txt,.csv" style="display: none;">
+                            <button class="btn btn-primary" onclick="document.getElementById('serverResultInput').click()">
+                                📤 결과 파일 업로드
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="server-checks-info">
+                    <h3>서버 접근이 필요한 검사 항목 (9개)</h3>
+                    <div class="server-checks-list" id="serverChecksList">
+                        <!-- Populated by JavaScript -->
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tab: Check Guide -->
+        <div class="tab-content" id="tab-check-guide">
+            <div class="check-guide-section">
+                <div class="check-guide-header">
+                    <h2>📋 검사 항목 안내</h2>
+                    <p>MySQL 8.0 → 8.4 업그레이드 시 확인하는 모든 호환성 검사 항목입니다.</p>
+                    <div class="check-stats">
+                        <span class="stat-item"><span class="stat-value" id="totalChecksCount">0</span> 총 검사 항목</span>
+                        <span class="stat-item dump"><span class="stat-value" id="dumpChecksCount">0</span> 덤프 분석</span>
+                        <span class="stat-item server"><span class="stat-value" id="serverChecksCount">0</span> 서버 필요</span>
+                    </div>
+                </div>
+                <div class="check-guide-content" id="checkGuideContent">
+                    <!-- Populated by JavaScript -->
+                </div>
             </div>
         </div>
 
