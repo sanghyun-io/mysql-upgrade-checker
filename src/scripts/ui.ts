@@ -6,6 +6,7 @@
 import type { AnalysisResults, Issue, RuleCategory, GroupedIssues } from './types';
 import { CATEGORY_LABELS, CATEGORY_DESCRIPTIONS, CATEGORY_ORDER } from './types';
 import { TOTAL_RULE_COUNT } from './rules';
+import { showError } from './toast';
 
 export class UIManager {
   private progressSection: HTMLElement;
@@ -243,7 +244,11 @@ export function copyToClipboard(text: string, button: HTMLButtonElement): void {
       showCopySuccess(button);
     } catch (err) {
       console.error('복사 실패:', err);
-      alert('클립보드 복사에 실패했습니다.');
+      showError('클립보드 복사에 실패했습니다.', {
+        errorType: 'CLIPBOARD_ERROR',
+        errorMessage: '클립보드 복사에 실패했습니다 (폴백 방식).',
+        additionalInfo: { method: 'execCommand' }
+      });
     }
     document.body.removeChild(textArea);
     return;
@@ -255,7 +260,11 @@ export function copyToClipboard(text: string, button: HTMLButtonElement): void {
     },
     (err) => {
       console.error('복사 실패:', err);
-      alert('클립보드 복사에 실패했습니다.');
+      showError('클립보드 복사에 실패했습니다.', {
+        errorType: 'CLIPBOARD_ERROR',
+        errorMessage: '클립보드 복사에 실패했습니다.',
+        additionalInfo: { method: 'navigator.clipboard' }
+      });
     }
   );
 }

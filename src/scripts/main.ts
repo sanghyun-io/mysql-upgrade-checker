@@ -2,6 +2,7 @@ import { FileAnalyzer } from './analyzer';
 import { UIManager, copyToClipboard } from './ui';
 import type { AnalysisResults } from './types';
 import { CHECK_GUIDE, SERVER_REQUIRED_CHECKS, COMBINED_SERVER_CHECK_QUERY } from './constants';
+import { showSuccess, showError, showInfo } from './toast';
 
 let uploadedFiles: File[] = [];
 let analysisResults: AnalysisResults = {
@@ -175,7 +176,11 @@ if (serverResultInput) {
         analyzeServerResult(content, file.name);
       } catch (error) {
         console.error('Failed to read server result file:', error);
-        alert('파일을 읽는 중 오류가 발생했습니다.');
+        showError('파일을 읽는 중 오류가 발생했습니다.', {
+          errorType: 'FILE_READ_ERROR',
+          errorMessage: '서버 결과 파일을 읽는 중 오류가 발생했습니다.',
+          additionalInfo: { fileName: file.name }
+        });
       }
     }
   });
@@ -192,7 +197,11 @@ function analyzeServerResult(content: string, _fileName: string): void {
   }
 
   if (!data || Object.keys(data).length === 0) {
-    alert('파일 형식을 인식할 수 없습니다. JSON 또는 텍스트 형식으로 저장해주세요.');
+    showError('파일 형식을 인식할 수 없습니다. JSON 또는 텍스트 형식으로 저장해주세요.', {
+      errorType: 'FILE_FORMAT_ERROR',
+      errorMessage: '서버 결과 파일의 형식을 인식할 수 없습니다.',
+      additionalInfo: { fileName: _fileName }
+    });
     return;
   }
 
@@ -200,7 +209,7 @@ function analyzeServerResult(content: string, _fileName: string): void {
   const serverIssues = processServerData(data);
 
   if (serverIssues.length === 0) {
-    alert('서버 검사 결과: 문제가 발견되지 않았습니다!');
+    showSuccess('서버 검사 결과: 문제가 발견되지 않았습니다!');
   } else {
     // Merge with existing results or display separately
     const serverResults: AnalysisResults = {
@@ -218,7 +227,7 @@ function analyzeServerResult(content: string, _fileName: string): void {
     if (dumpTab) dumpTab.click();
 
     uiManager.displayResults(serverResults);
-    alert(`서버 검사 완료: ${serverIssues.length}개의 문제가 발견되었습니다.`);
+    showInfo(`서버 검사 완료: ${serverIssues.length}개의 문제가 발견되었습니다.`);
   }
 }
 
@@ -366,7 +375,7 @@ document.body.appendChild(folderInput);
 
     downloadText(content, `mysql-upgrade-fix-queries-${new Date().toISOString().split('T')[0]}.sql`);
   } else {
-    alert('생성할 수정 쿼리가 없습니다.');
+    showInfo('생성할 수정 쿼리가 없습니다.');
   }
 };
 
