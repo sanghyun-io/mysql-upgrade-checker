@@ -11,27 +11,57 @@ Thank you for your interest in contributing!
 
 ## Development Setup
 
+**Prerequisites:**
+- Node.js 18 or higher
+- npm or yarn
+
 ```bash
 # Clone the repo
-git clone https://github.com/yourusername/mysql-upgrade-checker.git
+git clone https://github.com/sanghyun-io/mysql-upgrade-checker.git
 cd mysql-upgrade-checker
 
-# Open in browser
-open index.html
+# Install dependencies
+npm install
+
+# Start dev server with HMR
+npm run dev
+
+# Build for production
+npm run build
+
+# Preview production build
+npm run preview
 ```
 
 ## Code Style
 
-- Use consistent indentation (4 spaces)
+- Use TypeScript for type safety
+- Use consistent indentation (2 spaces)
 - Add comments for complex logic
 - Follow existing naming conventions
 - Keep functions focused and small
+- Run `npm run build` to check for TypeScript errors
+
+## Project Structure
+
+```
+src/
+├── index.html          # Main HTML file
+├── styles/
+│   └── main.css        # All CSS styles
+└── scripts/
+    ├── main.ts         # Entry point & event handlers
+    ├── types.ts        # TypeScript type definitions
+    ├── rules.ts        # Compatibility rules
+    ├── analyzer.ts     # File analysis logic
+    └── ui.ts           # UI rendering logic
+```
 
 ## Adding New Compatibility Rules
 
-To add a new compatibility check, add an entry to the `compatibilityRules` array in `index.html`:
+To add a new compatibility check, add an entry to the `compatibilityRules` array in `src/scripts/rules.ts`:
 
-```javascript
+```typescript
 {
     id: 'your_rule_id',
     type: 'schema', // or 'data', 'query'
@@ -47,14 +77,21 @@ To add a new compatibility check, add an entry to the `compatibilityRules` array
 }
 ```
 
+**Important:** After adding rules:
+1. Update TypeScript types in `types.ts` if needed
+2. Test the rule with actual dump files
+3. Verify the fix query is valid SQL
+
 ## Testing
 
 Before submitting a PR:
 
-1. Test with various dump files
-2. Verify all compatibility rules work correctly
-3. Check that fix queries are valid SQL
-4. Test in different browsers (Chrome, Firefox, Safari)
+1. Run TypeScript type check: `npm run build`
+2. Test with various mysqlsh dump files
+3. Verify all compatibility rules work correctly
+4. Check that fix queries are valid SQL
+5. Test in different browsers (Chrome, Firefox, Safari)
+6. Verify the production build works: `npm run preview`
 
 ## Pull Request Process
 

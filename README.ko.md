@@ -1,8 +1,12 @@
-# MySQL 8.0 → 8.4 업그레이드 호환성 검증기
+# MySQL 8.0 → 8.4 Upgrade Compatibility Checker
+
+> 한국어 | [English](./README.md)
 
 MySQL 8.0에서 8.4로 업그레이드하기 전에 스키마와 데이터의 호환성 문제를 사전에 발견하는 웹 기반 도구입니다.
 
-[English](README.md) | **한국어**
+![MySQL Upgrade Checker](https://img.shields.io/badge/MySQL-8.0→8.4-blue)
+![License](https://img.shields.io/badge/license-MIT-green)
+![No Server Required](https://img.shields.io/badge/server-not%20required-brightgreen)
 
 ## ✨ 주요 기능
 
@@ -16,25 +20,35 @@ MySQL 8.0에서 8.4로 업그레이드하기 전에 스키마와 데이터의 �
 
 ### 온라인 사용 (권장)
 
-GitHub Pages에서 바로 사용하세요:
+GitHub Pages에서 바로 사용 가능합니다:
 
-👉 **[https://yourusername.github.io/mysql-upgrade-checker](https://yourusername.github.io/mysql-upgrade-checker)**
+👉 **[https://sanghyun-io.github.io/mysql-upgrade-checker](https://sanghyun-io.github.io/mysql-upgrade-checker)**
 
-### 로컬 실행
-
-1. 이 레포지토리를 클론하거나 `index.html` 다운로드
-2. 브라우저에서 `index.html` 열기
-3. mysqlsh dump 폴더 선택 및 분석
+### 로컬 개발
 
 ```bash
-git clone https://github.com/yourusername/mysql-upgrade-checker.git
+# Clone
+git clone https://github.com/sanghyun-io/mysql-upgrade-checker.git
 cd mysql-upgrade-checker
-open index.html  # 브라우저에서 열기
+
+# 의존성 설치
+npm install
+
+# 개발 서버 실행 (HMR 지원)
+npm run dev
+
+# 프로덕션 빌드
+npm run build
+
+# 빌드 결과 미리보기
+npm run preview
 ```
 
 ## 📖 사용 방법
 
-### 1. 덤프 파일 생성
+### 1. Dump 파일 준비
+
+**mysqlsh를 사용한 덤프:**
 
 ```bash
 mysqlsh --uri user@host:3306 -- util dump-instance /path/to/dump \
@@ -44,64 +58,158 @@ mysqlsh --uri user@host:3306 -- util dump-instance /path/to/dump \
 
 ### 2. 분석 실행
 
-1. **"📁 폴더 선택"** 버튼 클릭
+1. 웹 페이지에서 **"📁 폴더 선택"** 클릭
 2. mysqlsh dump 폴더 선택
 3. **"🔍 분석 시작"** 클릭
 4. 결과 확인 및 수정 쿼리 다운로드
 
+### 3. 문제 해결
+
+분석 결과에서 각 이슈마다 제공되는:
+- 📋 **복사** 버튼으로 개별 수정 쿼리 복사
+- 🔧 **모든 수정 쿼리 다운로드** 버튼으로 전체 SQL 파일 다운로드
+
 ## 🔍 검사 항목
 
 ### 스키마 호환성
-- utf8/utf8mb3 문자셋
-- MyISAM 엔진
-- YEAR(2) 타입
-- ZEROFILL 속성
-- FLOAT/DOUBLE 정밀도
-- INT display width
-- SQL_CALC_FOUND_ROWS
+
+| 검사 항목 | 심각도 | 설명 |
+|---------|--------|------|
+| utf8 문자셋 | WARNING | MySQL 8.4에서 utf8은 utf8mb4를 가리킴 |
+| MyISAM 엔진 | WARNING | InnoDB 사용 권장 |
+| YEAR(2) | ERROR | Deprecated, YEAR(4)로 자동 변환됨 |
+| ZEROFILL | WARNING | MySQL 8.0.17부터 deprecated |
+| FLOAT(M,D), DOUBLE(M,D) | WARNING | Deprecated, DECIMAL 권장 |
+| INT(N) display width | INFO | MySQL 8.0.17부터 deprecated |
+| SQL_CALC_FOUND_ROWS | WARNING | MySQL 8.0.17부터 deprecated |
 
 ### 데이터 무결성
-- 0000-00-00 날짜
-- ENUM 빈 값
-- 4바이트 UTF-8 문자 (이모지)
-- NULL 바이트
-- TIMESTAMP 범위 초과
 
-## 💾 출력 형식
+| 검사 항목 | 심각도 | 설명 |
+|---------|--------|------|
+| 0000-00-00 날짜 | ERROR | NO_ZERO_DATE 모드에서 허용 안 됨 |
+| ENUM 빈 값 | ERROR | Strict 모드에서 문제 발생 |
+| 4바이트 UTF-8 문자 | WARNING | utf8mb3로 저장 불가 (이모지 등) |
+| NULL 바이트 | ERROR | 데이터에 \0 포함 |
+| TIMESTAMP 범위 초과 | ERROR | 1970~2038 범위 벗어남 |
 
-분석 완료 후 다음을 다운로드할 수 있습니다:
-
-1. **JSON 리포트** - 전체 분석 결과
-2. **SQL 파일** - 바로 실행 가능한 수정 쿼리
+## 💾 출력 예시
 
 ### 수정 쿼리 예시
 
 ```sql
+-- MySQL 8.0 to 8.4 업그레이드 수정 쿼리
+-- 생성일시: 2026-01-27T12:00:00.000Z
+-- 총 5개의 수정 쿼리
+
 -- 잘못된 날짜 값: 0000-00-00
+-- 위치: users.sql - Table: users
 UPDATE `users` SET `created_at` = NULL WHERE `created_at` = '0000-00-00';
 
 -- ENUM 컬럼에 빈 값
+-- 위치: orders.sql - Table: orders, Column: status
 UPDATE `orders` SET `status` = 'pending' WHERE `status` = '';
 
--- utf8 문자셋 사용
+-- utf8 문자셋 사용 (utf8mb3)
+-- 위치: products.sql - Table: products
 ALTER TABLE `products` CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 ```
 
-## 🔒 보안
+## 🏗️ 기술 스택
 
-- ✅ 모든 처리가 브라우저에서만 실행됨
-- ✅ 데이터가 외부로 전송되지 않음
-- ✅ 네트워크 연결 불필요
-- ✅ 덤프 파일이 로컬에만 유지됨
+- **TypeScript** - 타입 안정성
+- **Vite** - 빠른 빌드 및 HMR
+- **순수 HTML/CSS** - 프레임워크 없음
+- **클라이언트 사이드 처리** - 서버 불필요
+- **File API** - 로컬 파일 읽기
+- **Blob API** - 파일 다운로드
+
+## 🔒 보안 및 프라이버시
+
+- ✅ **모든 처리가 브라우저에서만 실행**
+- ✅ **데이터가 외부 서버로 전송되지 않음**
+- ✅ **네트워크 연결 불필요** (로컬 실행 시)
+- ✅ **덤프 파일이 로컬에만 유지됨**
+
+## 📋 지원하는 파일 형식
+
+- ✅ `.sql` - 스키마 및 INSERT 문
+- ✅ `.tsv` - mysqlsh 데이터 파일
+- ✅ `.json` - mysqlsh 메타데이터 (@.json)
+- ⏭️ `load-progress*.json` - 자동 건너뛰기
 
 ## 🤝 기여
 
-이슈, Pull Request, 문서 개선 모두 환영합니다!
+기여를 환영합니다! 다음 방법으로 참여하실 수 있습니다:
+
+1. 이슈 생성 - 버그 리포트 또는 기능 제안
+2. Pull Request - 코드 개선 또는 새 기능 추가
+3. 문서 개선 - README, 주석 등
+
+### 개발 환경 설정
+
+**필수 요구사항:**
+- Node.js 18 이상
+- npm 또는 yarn
+
+**프로젝트 구조:**
+```
+mysql-upgrade-checker/
+├── src/
+│   ├── index.html          # 메인 HTML
+│   ├── styles/
+│   │   └── main.css        # 스타일시트
+│   └── scripts/
+│       ├── main.ts         # 메인 진입점
+│       ├── types.ts        # TypeScript 타입 정의
+│       ├── rules.ts        # 호환성 규칙
+│       ├── analyzer.ts     # 파일 분석 로직
+│       └── ui.ts           # UI 렌더링
+├── dist/                   # 빌드 결과물 (자동 생성)
+├── package.json
+├── tsconfig.json
+├── vite.config.ts
+└── README.md
+```
+
+**개발 워크플로우:**
+
+```bash
+# 저장소 클론
+git clone https://github.com/sanghyun-io/mysql-upgrade-checker.git
+cd mysql-upgrade-checker
+
+# 의존성 설치
+npm install
+
+# 개발 서버 실행 (http://localhost:5173)
+npm run dev
+
+# 프로덕션 빌드
+npm run build
+
+# 빌드 결과 미리보기
+npm run preview
+```
+
+**Pull Request 제출 전:**
+1. TypeScript 타입 체크 통과 확인
+2. 빌드 성공 확인 (`npm run build`)
+3. 실제 mysqlsh dump로 테스트
 
 ## 📝 라이선스
 
-MIT License
+MIT License - 자유롭게 사용, 수정, 배포 가능합니다.
+
+## 🙏 크레딧
+
+- MySQL 공식 문서의 호환성 정보 기반
+- mysqlsh dump 형식 지원
+
+## 📞 문의
+
+이슈나 질문이 있으시면 [GitHub Issues](https://github.com/sanghyun-io/mysql-upgrade-checker/issues)에 등록해주세요.
 
 ---
 
-**⚠️ 주의:** 실제 프로덕션 환경으로 업그레이드하기 전에는 반드시 테스트 환경에서 충분한 검증을 수행하세요.
+**⚠️ 면책 조항:** 이 도구는 주요 호환성 문제를 감지하지만, 실제 프로덕션 환경으로 업그레이드하기 전에는 반드시 테스트 환경에서 충분한 검증을 수행해야 합니다.

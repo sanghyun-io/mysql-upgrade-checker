@@ -1,0 +1,23 @@
+{
+  "name": "mysql-upgrade-checker",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "MySQL 8.0 to 8.4 upgrade compatibility checker",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview"
+  },
+  "keywords": [
+    "mysql",
+    "upgrade",
+    "compatibility",
+    "checker"
+  ],
+  "author": "sanghyun-io",
+  "license": "MIT",
+  "devDependencies": {
+    "typescript": "^5.3.3",
+    "vite": "^5.0.11"
+  }
+}
