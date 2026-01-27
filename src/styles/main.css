@@ -1290,6 +1290,11 @@ body {
     font-size: 12px;
 }
 
+.db-connector-tip .method-link {
+    color: var(--accent-blue);
+    cursor: pointer;
+}
+
 .bastion-step {
     display: flex;
     align-items: center;

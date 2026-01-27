@@ -473,25 +473,38 @@ function downloadBlob(blob: Blob, filename: string): void {
 // ============================================================================
 // Method Tabs (inside Step 2)
 // ============================================================================
-function initializeMethodTabs(): void {
+function switchMethodTab(method: string): void {
   const methodTabs = document.querySelectorAll('.method-tab');
   const methodContents = document.querySelectorAll('.method-content');
+
+  // Remove active from all tabs and contents
+  methodTabs.forEach((t) => t.classList.remove('active'));
+  methodContents.forEach((c) => c.classList.remove('active'));
+
+  // Activate target tab and content
+  const targetTab = document.querySelector(`.method-tab[data-method="${method}"]`);
+  const targetContent = document.getElementById(`method-${method}`);
+  if (targetTab) targetTab.classList.add('active');
+  if (targetContent) targetContent.classList.add('active');
+}
+
+function initializeMethodTabs(): void {
+  const methodTabs = document.querySelectorAll('.method-tab');
 
   methodTabs.forEach((tab) => {
     tab.addEventListener('click', () => {
       const method = tab.getAttribute('data-method');
-      if (!method) return;
+      if (method) switchMethodTab(method);
+    });
+  });
 
-      // Remove active from all tabs and contents
-      methodTabs.forEach((t) => t.classList.remove('active'));
-      methodContents.forEach((c) => c.classList.remove('active'));
-
-      // Activate clicked tab and corresponding content
-      tab.classList.add('active');
-      const content = document.getElementById(`method-${method}`);
-      if (content) {
-        content.classList.add('active');
-      }
+  // Handle method links (e.g., "로컬 연결" link in tip)
+  const methodLinks = document.querySelectorAll('.method-link');
+  methodLinks.forEach((link) => {
+    link.addEventListener('click', (e) => {
+      e.preventDefault();
+      const method = link.getAttribute('data-method');
+      if (method) switchMethodTab(method);
     });
   });
 }
