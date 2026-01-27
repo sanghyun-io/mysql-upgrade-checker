@@ -11,7 +11,10 @@
       "Bash(grep:*)",
       "Bash(gh run list:*)",
       "Bash(gh run view:*)",
-      "Bash(ls:*)"
+      "Bash(ls:*)",
+      "Bash(git reset:*)",
+      "Bash(npm run dev:*)",
+      "Bash(timeout /t 3 /nobreak)"
     ]
   }
 }

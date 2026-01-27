@@ -8,11 +8,14 @@ import type {
   Issue,
   TableSchemas,
   ConfigSection,
-  AnalysisProgress,
-  FileAnalysisResult
+  AnalysisProgress
 } from './types';
 import { compatibilityRules } from './rules';
 import { REMOVED_SYS_VARS_84 } from './constants';
+
+// Callback types for real-time updates
+export type OnIssueCallback = (issue: Issue) => void;
+export type OnProgressCallback = (progress: AnalysisProgress) => void;
 
 export class FileAnalyzer {
   private results: AnalysisResults = {
@@ -29,38 +32,19 @@ export class FileAnalyzer {
     }
   };
 
-  // Use composition instead of extending EventTarget for better compatibility
-  private eventTarget: EventTarget = new EventTarget();
+  // Callbacks for real-time updates
+  private onIssue: OnIssueCallback | null = null;
+  private onProgress: OnProgressCallback | null = null;
 
-  // Public methods for adding event listeners
-  addEventListener(type: string, listener: EventListenerOrEventListenerObject): void {
-    this.eventTarget.addEventListener(type, listener);
-  }
-
-  removeEventListener(type: string, listener: EventListenerOrEventListenerObject): void {
-    this.eventTarget.removeEventListener(type, listener);
-  }
-
-  // Event emission methods
-  private emitIssue(issue: Issue): void {
-    this.eventTarget.dispatchEvent(new CustomEvent('issue', { detail: issue }));
-  }
-
-  private emitProgress(progress: AnalysisProgress): void {
-    this.eventTarget.dispatchEvent(new CustomEvent('progress', { detail: progress }));
-  }
-
-  private emitFileComplete(result: FileAnalysisResult): void {
-    this.eventTarget.dispatchEvent(new CustomEvent('fileComplete', { detail: result }));
-  }
-
-  private emitAnalysisComplete(results: AnalysisResults): void {
-    this.eventTarget.dispatchEvent(new CustomEvent('analysisComplete', { detail: results }));
+  // Set callbacks for real-time updates
+  setCallbacks(onIssue: OnIssueCallback | null, onProgress: OnProgressCallback | null): void {
+    this.onIssue = onIssue;
+    this.onProgress = onProgress;
   }
 
   // Yield to UI thread for responsiveness
   private yieldToUI(): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, 10));
+    return new Promise(resolve => setTimeout(resolve, 5));
   }
 
   async analyzeFiles(files: File[]): Promise<AnalysisResults> {
@@ -91,44 +75,34 @@ export class FileAnalyzer {
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
       const fileType = this.detectFileType(file.name);
-      const issueCountBefore = this.results.issues.length;
 
-      // Emit progress: analyzing
-      this.emitProgress({
-        currentFile: file.name,
-        currentFileIndex: i,
-        totalFiles: files.length,
-        fileType,
-        phase: fileType === 'skip' ? 'skipped' : 'analyzing'
-      });
+      // Notify progress
+      if (this.onProgress) {
+        this.onProgress({
+          currentFile: file.name,
+          currentFileIndex: i,
+          totalFiles: files.length,
+          fileType,
+          phase: fileType === 'skip' ? 'skipped' : 'analyzing'
+        });
+      }
 
       // Yield to UI for responsiveness
       await this.yieldToUI();
 
       await this.analyzeFile(file);
 
-      const issuesFound = this.results.issues.length - issueCountBefore;
-
-      // Emit file complete
-      this.emitFileComplete({
-        fileName: file.name,
-        fileType,
-        issuesFound,
-        skipped: fileType === 'skip'
-      });
-
-      // Emit progress: complete
-      this.emitProgress({
-        currentFile: file.name,
-        currentFileIndex: i,
-        totalFiles: files.length,
-        fileType,
-        phase: 'complete'
-      });
+      // Notify progress complete
+      if (this.onProgress) {
+        this.onProgress({
+          currentFile: file.name,
+          currentFileIndex: i,
+          totalFiles: files.length,
+          fileType,
+          phase: 'complete'
+        });
+      }
     }
-
-    // Emit analysis complete
-    this.emitAnalysisComplete(this.results);
 
     return this.results;
   }
@@ -682,8 +656,10 @@ export class FileAnalyzer {
         this.results.categoryStats[issue.category]++;
       }
 
-      // Emit issue event for real-time display
-      this.emitIssue(issue);
+      // Call callback for real-time display
+      if (this.onIssue) {
+        this.onIssue(issue);
+      }
     }
   }
 

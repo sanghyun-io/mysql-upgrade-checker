@@ -513,25 +513,25 @@ function initializeMethodTabs(): void {
 }
 
 // ============================================================================
-// Real-time Analysis Event Setup
+// Real-time Analysis Callback Setup
 // ============================================================================
 function setupRealtimeAnalysis(): void {
-  // Handle real-time issue detection
-  fileAnalyzer.addEventListener('issue', (event) => {
-    const issue = (event as CustomEvent<Issue>).detail;
-    uiManager.addIssueRealtime(issue);
-  });
-
-  // Handle progress updates
-  fileAnalyzer.addEventListener('progress', (event) => {
-    const progress = (event as CustomEvent<AnalysisProgress>).detail;
-    uiManager.updateProgress(
-      progress.currentFileIndex + 1,
-      progress.totalFiles,
-      progress.currentFile,
-      progress.fileType
-    );
-  });
+  // Set callbacks for real-time updates
+  fileAnalyzer.setCallbacks(
+    // onIssue callback
+    (issue: Issue) => {
+      uiManager.addIssueRealtime(issue);
+    },
+    // onProgress callback
+    (progress: AnalysisProgress) => {
+      uiManager.updateProgress(
+        progress.currentFileIndex + 1,
+        progress.totalFiles,
+        progress.currentFile,
+        progress.fileType
+      );
+    }
+  );
 }
 
 // ============================================================================
