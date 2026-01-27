@@ -286,3 +286,32 @@ export interface GroupedIssues {
   warningCount: number;
   infoCount: number;
 }
+
+// ============================================================================
+// REAL-TIME ANALYSIS EVENTS
+// ============================================================================
+
+// Analysis progress information
+export interface AnalysisProgress {
+  currentFile: string;
+  currentFileIndex: number;
+  totalFiles: number;
+  fileType: string;
+  phase: 'reading' | 'analyzing' | 'complete' | 'skipped';
+}
+
+// File analysis result summary
+export interface FileAnalysisResult {
+  fileName: string;
+  fileType: string;
+  issuesFound: number;
+  skipped: boolean;
+}
+
+// Event types for FileAnalyzer
+export interface AnalyzerEventMap {
+  'issue': CustomEvent<Issue>;
+  'progress': CustomEvent<AnalysisProgress>;
+  'fileComplete': CustomEvent<FileAnalysisResult>;
+  'analysisComplete': CustomEvent<AnalysisResults>;
+}
