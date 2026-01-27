@@ -14,7 +14,7 @@ import type {
 import { compatibilityRules } from './rules';
 import { REMOVED_SYS_VARS_84 } from './constants';
 
-export class FileAnalyzer extends EventTarget {
+export class FileAnalyzer {
   private results: AnalysisResults = {
     issues: [],
     stats: { safe: 0, error: 0, warning: 0, info: 0 },
@@ -29,30 +29,38 @@ export class FileAnalyzer extends EventTarget {
     }
   };
 
-  constructor() {
-    super();
+  // Use composition instead of extending EventTarget for better compatibility
+  private eventTarget: EventTarget = new EventTarget();
+
+  // Public methods for adding event listeners
+  addEventListener(type: string, listener: EventListenerOrEventListenerObject): void {
+    this.eventTarget.addEventListener(type, listener);
+  }
+
+  removeEventListener(type: string, listener: EventListenerOrEventListenerObject): void {
+    this.eventTarget.removeEventListener(type, listener);
   }
 
   // Event emission methods
   private emitIssue(issue: Issue): void {
-    this.dispatchEvent(new CustomEvent('issue', { detail: issue }));
+    this.eventTarget.dispatchEvent(new CustomEvent('issue', { detail: issue }));
   }
 
   private emitProgress(progress: AnalysisProgress): void {
-    this.dispatchEvent(new CustomEvent('progress', { detail: progress }));
+    this.eventTarget.dispatchEvent(new CustomEvent('progress', { detail: progress }));
   }
 
   private emitFileComplete(result: FileAnalysisResult): void {
-    this.dispatchEvent(new CustomEvent('fileComplete', { detail: result }));
+    this.eventTarget.dispatchEvent(new CustomEvent('fileComplete', { detail: result }));
   }
 
   private emitAnalysisComplete(results: AnalysisResults): void {
-    this.dispatchEvent(new CustomEvent('analysisComplete', { detail: results }));
+    this.eventTarget.dispatchEvent(new CustomEvent('analysisComplete', { detail: results }));
   }
 
   // Yield to UI thread for responsiveness
   private yieldToUI(): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, 0));
+    return new Promise(resolve => setTimeout(resolve, 10));
   }
 
   async analyzeFiles(files: File[]): Promise<AnalysisResults> {
