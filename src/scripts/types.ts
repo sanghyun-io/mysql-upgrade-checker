@@ -292,6 +292,21 @@ export type TableCharsetMap = Map<string, TableCharsetInfo>;
 export type TableIndexMap = Map<string, TableIndexInfo>;
 
 /**
+ * ZEROFILL column information for cross-validation
+ */
+export interface ZerofillColumnInfo {
+  tableName: string;
+  columnName: string;
+  displayWidth: number;
+  baseType: string;
+}
+
+/**
+ * Map of table.column to ZEROFILL info
+ */
+export type ZerofillColumnMap = Map<string, ZerofillColumnInfo>;
+
+/**
  * Pending FK check to be validated after collecting all table indexes
  */
 export interface PendingFKCheck {

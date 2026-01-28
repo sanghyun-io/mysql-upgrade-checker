@@ -16,7 +16,8 @@ import type {
   PendingViewCheck,
   TableCharsetInfo,
   TableCharsetMap,
-  ColumnCharsetInfo
+  ColumnCharsetInfo,
+  ZerofillColumnMap
 } from './types';
 import { compatibilityRules } from './rules';
 import { REMOVED_SYS_VARS_84, SYS_VARS_NEW_DEFAULTS_84, CHANGED_FUNCTIONS_IN_GENERATED_COLUMNS, NEW_RESERVED_KEYWORDS_84 } from './constants';
@@ -59,6 +60,9 @@ export class FileAnalyzer {
 
   // 2-Pass analysis: FTS table prefix context validation
   private tablesWithFulltextIndex: Set<string> = new Set();
+
+  // 2-Pass analysis: ZEROFILL column cross-validation
+  private zerofillColumns: ZerofillColumnMap = new Map();
 
   // Files content cache for 2-pass analysis
   private fileContentsCache: Map<string, string> = new Map();
@@ -646,7 +650,107 @@ export class FileAnalyzer {
 
       // Latin1 charset with non-ASCII data check
       this.checkLatin1NonAsciiData(tableName, valuesStr, fileName);
+
+      // ZEROFILL cross-validation: check if values depend on zero-padding
+      this.checkZerofillData(tableName, columns, valuesStr, fileName);
     }
+  }
+
+  /**
+   * Check ZEROFILL column data for zero-padding dependency
+   * If a value is shorter than the display width, it relies on ZEROFILL padding
+   */
+  private checkZerofillData(
+    tableName: string,
+    columns: string[],
+    valuesStr: string,
+    fileName: string
+  ): void {
+    // Extract values from the VALUES clause
+    const valuesMatch = valuesStr.match(/\(([^)]+)\)/);
+    if (!valuesMatch) return;
+
+    const values = this.parseInsertValues(valuesMatch[1]);
+
+    for (let i = 0; i < columns.length && i < values.length; i++) {
+      const columnName = columns[i];
+      const key = `${tableName.toLowerCase()}.${columnName.toLowerCase()}`;
+      const zerofillInfo = this.zerofillColumns.get(key);
+
+      if (!zerofillInfo) continue;
+
+      const value = values[i].trim();
+
+      // Skip NULL or non-numeric values
+      if (value.toUpperCase() === 'NULL' || !/^\d+$/.test(value)) {
+        continue;
+      }
+
+      // Check if value length is less than display width (would need zero-padding)
+      if (value.length < zerofillInfo.displayWidth) {
+        this.addIssue({
+          id: 'zerofill_data_dependency',
+          type: 'data',
+          category: 'dataIntegrity',
+          severity: 'info',
+          title: 'ZEROFILL 제로패딩 의존 데이터',
+          description: `테이블 '${tableName}'의 ZEROFILL 컬럼 '${columnName}'에 display width(${zerofillInfo.displayWidth})보다 짧은 값 '${value}'이(가) 삽입됩니다. ZEROFILL 제거 후 제로패딩이 사라집니다.`,
+          suggestion: `이 데이터가 제로패딩된 형식(예: ${value.padStart(zerofillInfo.displayWidth, '0')})에 의존하는 경우, 애플리케이션 로직을 수정하거나 데이터를 LPAD()로 변환하세요.`,
+          location: `${fileName} - Table: ${tableName}, Column: ${columnName}`,
+          tableName: tableName,
+          columnName: columnName,
+          code: `${columnName}: ${value} → display width: ${zerofillInfo.displayWidth}`,
+          mysqlShellCheckId: 'zerofill',
+          docLink: 'https://dev.mysql.com/doc/refman/8.4/en/numeric-type-syntax.html',
+          fixQuery: `-- 애플리케이션에서 LPAD를 사용하여 제로패딩 적용:\n-- SELECT LPAD(${columnName}, ${zerofillInfo.displayWidth}, '0') FROM ${tableName};`
+        });
+      }
+    }
+  }
+
+  /**
+   * Parse INSERT values handling quoted strings and nested content
+   */
+  private parseInsertValues(valuesContent: string): string[] {
+    const values: string[] = [];
+    let current = '';
+    let inQuote = false;
+    let quoteChar = '';
+    let depth = 0;
+
+    for (let i = 0; i < valuesContent.length; i++) {
+      const char = valuesContent[i];
+
+      if (!inQuote) {
+        if (char === "'" || char === '"') {
+          inQuote = true;
+          quoteChar = char;
+          current += char;
+        } else if (char === '(') {
+          depth++;
+          current += char;
+        } else if (char === ')') {
+          depth--;
+          current += char;
+        } else if (char === ',' && depth === 0) {
+          values.push(current.trim());
+          current = '';
+        } else {
+          current += char;
+        }
+      } else {
+        current += char;
+        if (char === quoteChar && valuesContent[i - 1] !== '\\') {
+          inQuote = false;
+        }
+      }
+    }
+
+    if (current.trim()) {
+      values.push(current.trim());
+    }
+
+    return values;
   }
 
   /**
@@ -763,6 +867,39 @@ export class FileAnalyzer {
 
         // Check FTS_ table prefix with context
         this.checkFTSTablePrefix(table, fileName);
+
+        // Collect ZEROFILL columns for cross-validation with INSERT data
+        this.collectZerofillColumns(table);
+      }
+    }
+  }
+
+  /**
+   * Collect ZEROFILL columns for cross-validation with INSERT data
+   */
+  private collectZerofillColumns(table: TableInfo): void {
+    for (const column of table.columns) {
+      const columnType = column.type.toUpperCase();
+
+      // Check if column has ZEROFILL attribute
+      if (!columnType.includes('ZEROFILL')) {
+        continue;
+      }
+
+      // Extract display width from type (e.g., INT(5) -> 5)
+      const widthMatch = columnType.match(/(?:TINYINT|SMALLINT|MEDIUMINT|INT|INTEGER|BIGINT)\s*\((\d+)\)/i);
+      if (widthMatch) {
+        const displayWidth = parseInt(widthMatch[1], 10);
+        const baseTypeMatch = columnType.match(/(TINYINT|SMALLINT|MEDIUMINT|INT|INTEGER|BIGINT)/i);
+        const baseType = baseTypeMatch ? baseTypeMatch[1] : 'INT';
+
+        const key = `${table.name.toLowerCase()}.${column.name.toLowerCase()}`;
+        this.zerofillColumns.set(key, {
+          tableName: table.name,
+          columnName: column.name,
+          displayWidth,
+          baseType
+        });
       }
     }
   }

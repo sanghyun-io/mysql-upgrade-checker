@@ -803,7 +803,37 @@ CREATE TABLE articles (
   title VARCHAR(200),
   body TEXT,
   FULLTEXT INDEX ft_body (body)
-);`
+);`,
+
+  // ==============================
+  // ZEROFILL DATA CROSS-VALIDATION
+  // ==============================
+
+  // ZEROFILL column with short value - should produce info
+  zerofillWithShortValue: `
+CREATE TABLE orders (
+  id INT PRIMARY KEY,
+  order_num INT(8) ZEROFILL
+);
+INSERT INTO orders (id, order_num) VALUES (1, 123);
+INSERT INTO orders (id, order_num) VALUES (2, 45);`,
+
+  // ZEROFILL column with full-width value - should NOT produce info
+  zerofillWithFullValue: `
+CREATE TABLE invoices (
+  id INT PRIMARY KEY,
+  invoice_num INT(6) ZEROFILL
+);
+INSERT INTO invoices (id, invoice_num) VALUES (1, 123456);
+INSERT INTO invoices (id, invoice_num) VALUES (2, 999999);`,
+
+  // No ZEROFILL column - should NOT produce info
+  noZerofillColumn: `
+CREATE TABLE products (
+  id INT PRIMARY KEY,
+  product_code INT(8)
+);
+INSERT INTO products (id, product_code) VALUES (1, 123);`
 };
 
 // ============================================================================

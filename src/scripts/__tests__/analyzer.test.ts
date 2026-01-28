@@ -1207,3 +1207,39 @@ describe('FileAnalyzer - FTS Table Prefix Context Validation', () => {
     });
   });
 });
+
+// =============================================================================
+// ZEROFILL DATA CROSS-VALIDATION (Task 12)
+// =============================================================================
+
+describe('FileAnalyzer - ZEROFILL Data Cross-Validation', () => {
+  describe('ZEROFILL column with short value', () => {
+    it('should report info for ZEROFILL column with short value', async () => {
+      const issues = await analyzeContent('orders.sql', TWO_PASS_FIXTURES.zerofillWithShortValue);
+
+      const zerofillIssues = issues.filter(i => i.id === 'zerofill_data_dependency');
+      expect(zerofillIssues.length).toBeGreaterThanOrEqual(1);
+      expect(zerofillIssues[0]?.severity).toBe('info');
+      expect(zerofillIssues[0]?.description).toContain('123');
+      expect(zerofillIssues[0]?.columnName).toBe('order_num');
+    });
+  });
+
+  describe('ZEROFILL column with full-width value', () => {
+    it('should NOT report info for ZEROFILL column with full-width value', async () => {
+      const issues = await analyzeContent('invoices.sql', TWO_PASS_FIXTURES.zerofillWithFullValue);
+
+      const zerofillIssue = findIssueById(issues, 'zerofill_data_dependency');
+      expect(zerofillIssue).toBeUndefined();
+    });
+  });
+
+  describe('No ZEROFILL column', () => {
+    it('should NOT report info for non-ZEROFILL column', async () => {
+      const issues = await analyzeContent('products.sql', TWO_PASS_FIXTURES.noZerofillColumn);
+
+      const zerofillIssue = findIssueById(issues, 'zerofill_data_dependency');
+      expect(zerofillIssue).toBeUndefined();
+    });
+  });
+});
