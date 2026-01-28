@@ -4,6 +4,7 @@
  */
 
 import type { CompatibilityRule } from '../types';
+import { AUTH_PLUGINS } from '../constants';
 
 // ============================================================================
 // AUTHENTICATION RULES
@@ -98,5 +99,39 @@ export const authenticationRules: CompatibilityRule[] = [
       }
       return null;
     }
+  },
+  // Using AUTH_PLUGINS constant for comprehensive auth plugin checking
+  {
+    id: 'auth_plugin_status_disabled',
+    type: 'privilege',
+    category: 'authentication',
+    pattern: new RegExp(`IDENTIFIED\\s+(?:WITH|BY)\\s+['"]?(${AUTH_PLUGINS.disabled.join('|')})['"]?`, 'gi'),
+    severity: 'warning',
+    title: '기본 비활성화된 인증 플러그인',
+    description: `다음 인증 플러그인은 MySQL 8.4에서 기본적으로 비활성화됩니다: ${AUTH_PLUGINS.disabled.join(', ')}`,
+    suggestion: `${AUTH_PLUGINS.recommended}로 마이그레이션하거나 서버 설정에서 명시적으로 활성화하세요.`,
+    mysqlShellCheckId: 'authMethodUsage'
+  },
+  {
+    id: 'auth_plugin_status_removed',
+    type: 'privilege',
+    category: 'authentication',
+    pattern: new RegExp(`IDENTIFIED\\s+(?:WITH|BY)\\s+['"]?(${AUTH_PLUGINS.removed.join('|')})['"]?`, 'gi'),
+    severity: 'error',
+    title: '제거된 인증 플러그인',
+    description: `다음 인증 플러그인은 MySQL 8.4에서 완전히 제거되었습니다: ${AUTH_PLUGINS.removed.join(', ')}`,
+    suggestion: `${AUTH_PLUGINS.recommended}로 마이그레이션하세요.`,
+    mysqlShellCheckId: 'pluginUsage'
+  },
+  {
+    id: 'auth_plugin_status_deprecated',
+    type: 'privilege',
+    category: 'authentication',
+    pattern: new RegExp(`IDENTIFIED\\s+WITH\\s+['"]?(${AUTH_PLUGINS.deprecated.join('|')})['"]?`, 'gi'),
+    severity: 'warning',
+    title: 'Deprecated 인증 플러그인',
+    description: `다음 인증 플러그인은 deprecated되었습니다: ${AUTH_PLUGINS.deprecated.join(', ')}`,
+    suggestion: `${AUTH_PLUGINS.recommended}로 마이그레이션하세요.`,
+    mysqlShellCheckId: 'deprecatedDefaultAuth'
   }
 ];
