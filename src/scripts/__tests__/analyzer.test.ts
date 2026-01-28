@@ -1016,3 +1016,29 @@ describe('FileAnalyzer - FK Name Length Validation', () => {
     });
   });
 });
+
+// ============================================================================
+// ORPHANED OBJECTS (VIEW REFERENCE) TESTS
+// ============================================================================
+
+describe('FileAnalyzer - Orphaned Objects Detection', () => {
+  describe('VIEW referencing missing table', () => {
+    it('should report warning for VIEW referencing non-existent table', async () => {
+      const issues = await analyzeContent('views.sql', TWO_PASS_FIXTURES.viewOrphanedReference);
+
+      const orphanIssue = findIssueById(issues, 'view_orphaned_reference');
+      expect(orphanIssue).toBeDefined();
+      expect(orphanIssue?.severity).toBe('warning');
+      expect(orphanIssue?.description).toContain('orders');  // The missing table
+    });
+  });
+
+  describe('VIEW referencing existing tables', () => {
+    it('should NOT report warning for VIEW with all tables present', async () => {
+      const issues = await analyzeContent('valid_views.sql', TWO_PASS_FIXTURES.viewValidReference);
+
+      const orphanIssue = findIssueById(issues, 'view_orphaned_reference');
+      expect(orphanIssue).toBeUndefined();
+    });
+  });
+});

@@ -13,6 +13,7 @@ import type {
   TableIndexInfo,
   TableIndexMap,
   PendingFKCheck,
+  PendingViewCheck,
   TableCharsetInfo,
   TableCharsetMap,
   ColumnCharsetInfo
@@ -51,6 +52,10 @@ export class FileAnalyzer {
 
   // 2-Pass analysis: table charset map for 4-byte UTF-8 cross-validation
   private tableCharsetMap: TableCharsetMap = new Map();
+
+  // 2-Pass analysis: view reference validation (orphaned objects check)
+  private knownTables: Set<string> = new Set();
+  private pendingViewChecks: PendingViewCheck[] = [];
 
   // Files content cache for 2-pass analysis
   private fileContentsCache: Map<string, string> = new Map();
@@ -148,6 +153,11 @@ export class FileAnalyzer {
     // PASS 2.5: Validate FK references using collected table index info
     // ========================================================================
     this.validateForeignKeyReferences();
+
+    // ========================================================================
+    // PASS 2.6: Validate VIEW references (orphaned objects check)
+    // ========================================================================
+    this.validateViewReferences();
 
     // Clean up cache
     this.fileContentsCache.clear();
@@ -367,6 +377,9 @@ export class FileAnalyzer {
 
     // INSERT statement data analysis
     this.analyzeInsertStatements(content, fileName);
+
+    // VIEW reference collection for orphaned objects check
+    this.collectViewReferences(content, fileName);
   }
 
   private analyzeWithPatternRules(content: string, fileName: string): void {
@@ -1124,6 +1137,9 @@ export class FileAnalyzer {
 
       // Store with table name as key (lowercase for case-insensitive matching)
       this.tableIndexMap.set(table.name.toLowerCase(), tableInfo);
+
+      // Also track known tables for orphaned objects check
+      this.knownTables.add(table.name.toLowerCase());
     }
   }
 
@@ -1511,6 +1527,92 @@ export class FileAnalyzer {
     }
 
     return true;
+  }
+
+  /**
+   * Collect VIEW references from SQL content for orphaned objects check
+   */
+  private collectViewReferences(content: string, fileName: string): void {
+    // Match CREATE VIEW statements
+    const viewPattern = /CREATE\s+(?:OR\s+REPLACE\s+)?(?:ALGORITHM\s*=\s*\w+\s+)?(?:DEFINER\s*=\s*[^\s]+\s+)?(?:SQL\s+SECURITY\s+\w+\s+)?VIEW\s+(?:`([^`]+)`|(\w+))\s+AS\s+SELECT\s+([\s\S]+?)(?:;|$)/gi;
+    const matches = content.matchAll(viewPattern);
+
+    for (const match of matches) {
+      const viewName = match[1] || match[2];
+      const selectClause = match[3];
+
+      // Extract referenced tables from the SELECT clause
+      const referencedTables = this.extractTablesFromSelect(selectClause);
+
+      if (referencedTables.length > 0) {
+        this.pendingViewChecks.push({
+          viewName,
+          referencedTables,
+          location: fileName,
+          code: `CREATE VIEW ${viewName} AS SELECT...`
+        });
+      }
+    }
+  }
+
+  /**
+   * Extract table names from a SELECT clause
+   */
+  private extractTablesFromSelect(selectClause: string): string[] {
+    const tables: string[] = [];
+
+    // Match FROM clause tables: FROM table1, table2 or FROM table1 JOIN table2
+    const fromPattern = /\bFROM\s+(?:`([^`]+)`|(\w+))(?:\s+(?:AS\s+)?(?:`[^`]+`|\w+))?/gi;
+    const joinPattern = /\bJOIN\s+(?:`([^`]+)`|(\w+))(?:\s+(?:AS\s+)?(?:`[^`]+`|\w+))?/gi;
+
+    const fromMatches = selectClause.matchAll(fromPattern);
+    for (const match of fromMatches) {
+      const tableName = match[1] || match[2];
+      if (tableName && !tables.includes(tableName.toLowerCase())) {
+        tables.push(tableName.toLowerCase());
+      }
+    }
+
+    const joinMatches = selectClause.matchAll(joinPattern);
+    for (const match of joinMatches) {
+      const tableName = match[1] || match[2];
+      if (tableName && !tables.includes(tableName.toLowerCase())) {
+        tables.push(tableName.toLowerCase());
+      }
+    }
+
+    return tables;
+  }
+
+  /**
+   * Pass 2.6: Validate VIEW references against known tables
+   */
+  private validateViewReferences(): void {
+    for (const viewCheck of this.pendingViewChecks) {
+      const missingTables: string[] = [];
+
+      for (const refTable of viewCheck.referencedTables) {
+        if (!this.knownTables.has(refTable)) {
+          missingTables.push(refTable);
+        }
+      }
+
+      if (missingTables.length > 0) {
+        this.addIssue({
+          id: 'view_orphaned_reference',
+          type: 'schema',
+          category: 'invalidObjects',
+          severity: 'warning',
+          title: '뷰 참조 테이블 미발견',
+          description: `뷰 '${viewCheck.viewName}'이(가) 참조하는 테이블 '${missingTables.join(', ')}'이(가) 덤프에 포함되어 있지 않습니다.`,
+          suggestion: '참조 테이블이 다른 스키마에 있거나 덤프에 포함되지 않았을 수 있습니다. 테이블이 존재하는지 확인하세요.',
+          location: viewCheck.location,
+          tableName: viewCheck.viewName,
+          code: viewCheck.code,
+          mysqlShellCheckId: 'orphanedObjects'
+        });
+      }
+    }
   }
 
   // ==========================================================================

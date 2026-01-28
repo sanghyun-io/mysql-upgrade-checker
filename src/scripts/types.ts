@@ -300,6 +300,16 @@ export interface PendingFKCheck {
   code: string;
 }
 
+/**
+ * Pending VIEW check to be validated after collecting all table names
+ */
+export interface PendingViewCheck {
+  viewName: string;
+  referencedTables: string[];
+  location: string;
+  code: string;
+}
+
 // ============================================================================
 // USER/PRIVILEGE INFO
 // ============================================================================

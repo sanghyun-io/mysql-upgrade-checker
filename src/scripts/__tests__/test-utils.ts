@@ -625,7 +625,33 @@ CREATE TABLE child (
   id INT PRIMARY KEY,
   parent_id INT,
   CONSTRAINT fk_child_parent FOREIGN KEY (parent_id) REFERENCES parent(id)
-);`
+);`,
+
+  // VIEW referencing missing table - should produce warning
+  viewOrphanedReference: `
+CREATE TABLE users (
+  id INT PRIMARY KEY,
+  name VARCHAR(100)
+);
+CREATE VIEW user_orders AS
+SELECT u.id, u.name, o.order_date
+FROM users u
+JOIN orders o ON u.id = o.user_id;`,
+
+  // VIEW referencing existing table - should NOT produce warning
+  viewValidReference: `
+CREATE TABLE products (
+  id INT PRIMARY KEY,
+  name VARCHAR(100)
+);
+CREATE TABLE categories (
+  id INT PRIMARY KEY,
+  name VARCHAR(100)
+);
+CREATE VIEW product_categories AS
+SELECT p.name AS product, c.name AS category
+FROM products p
+JOIN categories c ON p.id = c.id;`
 };
 
 // ============================================================================
