@@ -69,6 +69,12 @@ export function parseCreateTable(sql: string): TableInfo | null {
     table.collation = collationMatch[1];
   }
 
+  // Parse table-level TABLESPACE (before PARTITION BY clause)
+  const tablespaceMatch = tableOptions.match(/TABLESPACE\s*=?\s*[`'"]*(\w+)[`'"]*/i);
+  if (tablespaceMatch) {
+    table.tablespace = tablespaceMatch[1];
+  }
+
   return table;
 }
 
@@ -389,19 +395,28 @@ function parsePartitions(tableOptions: string): PartitionInfo[] | undefined {
 
   // Match individual partition definitions
   // Handle both "VALUES LESS THAN" (RANGE) and "VALUES IN" (LIST)
-  const partitionPattern = /PARTITION\s+(?:`([^`]+)`|(\w+))\s+VALUES\s+(?:LESS\s+THAN|IN)\s*\(([^)]*(?:\([^)]*\))?[^)]*)\)/gi;
+  // Also capture optional TABLESPACE clause after VALUES
+  // End can be comma (,) or whitespace/closing paren for last partition
+  const partitionPattern = /PARTITION\s+(?:`([^`]+)`|(\w+))\s+VALUES\s+(?:LESS\s+THAN|IN)\s*\(([^)]*(?:\([^)]*\))?[^)]*)\)(?:\s+TABLESPACE\s*=?\s*[`'"]*(\w+)[`'"]*)?/gi;
   const matches = partitionDefs.matchAll(partitionPattern);
 
   for (const match of matches) {
     const partitionName = match[1] || match[2];
     const description = match[3].trim();
+    const tablespace = match[4]; // Optional TABLESPACE
 
-    partitions.push({
+    const partition: PartitionInfo = {
       name: partitionName,
       type: partitionType,
       expression,
       description
-    });
+    };
+
+    if (tablespace) {
+      partition.tablespace = tablespace;
+    }
+
+    partitions.push(partition);
   }
 
   return partitions.length > 0 ? partitions : undefined;

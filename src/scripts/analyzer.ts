@@ -1014,6 +1014,9 @@ export class FileAnalyzer {
       return;
     }
 
+    // Shared tablespaces that don't support partitioned tables in MySQL 8.0.13+
+    const SHARED_TABLESPACES = ['mysql', 'innodb_system', 'innodb_temporary'];
+
     // Check if table engine is non-native partitioning engine
     const NON_NATIVE_ENGINES = ['MYISAM', 'MERGE', 'CSV'];
     if (table.engine && NON_NATIVE_ENGINES.includes(table.engine.toUpperCase())) {
@@ -1034,6 +1037,25 @@ export class FileAnalyzer {
       });
     }
 
+    // Check table-level TABLESPACE for shared tablespaces
+    if (table.tablespace && SHARED_TABLESPACES.includes(table.tablespace.toLowerCase())) {
+      this.addIssue({
+        id: 'partition_shared_tablespace_parsed',
+        type: 'schema',
+        category: 'invalidObjects',
+        severity: 'error',
+        title: '공유 테이블스페이스의 파티션 테이블',
+        description: `파티션 테이블 '${table.name}'이(가) 공유 테이블스페이스 '${table.tablespace}'에 있습니다. MySQL 8.0.13 이후 지원되지 않습니다.`,
+        suggestion: 'file-per-table 테이블스페이스로 이동하거나 TABLESPACE 절을 제거하세요.',
+        location: fileName,
+        tableName: table.name,
+        code: `TABLESPACE=${table.tablespace} PARTITION BY ${table.partitions[0]?.type || 'UNKNOWN'}`,
+        mysqlShellCheckId: 'partitionedTablesInSharedTablespaces',
+        docLink: 'https://dev.mysql.com/doc/refman/8.4/en/partitioning-limitations.html',
+        fixQuery: `ALTER TABLE \`${table.name}\` TABLESPACE = innodb_file_per_table;`
+      });
+    }
+
     for (const partition of table.partitions) {
       // Check for deprecated partition features
       if (partition.type === 'LINEAR HASH' || partition.type === 'LINEAR KEY') {
@@ -1049,6 +1071,25 @@ export class FileAnalyzer {
           tableName: table.name,
           code: `PARTITION BY ${partition.type}`,
           docLink: 'https://dev.mysql.com/doc/refman/8.4/en/partitioning.html'
+        });
+      }
+
+      // Check partition-level TABLESPACE for shared tablespaces
+      if (partition.tablespace && SHARED_TABLESPACES.includes(partition.tablespace.toLowerCase())) {
+        this.addIssue({
+          id: 'partition_shared_tablespace_individual',
+          type: 'schema',
+          category: 'invalidObjects',
+          severity: 'error',
+          title: '공유 테이블스페이스의 개별 파티션',
+          description: `테이블 '${table.name}'의 파티션 '${partition.name}'이(가) 공유 테이블스페이스 '${partition.tablespace}'에 있습니다. MySQL 8.0.13 이후 지원되지 않습니다.`,
+          suggestion: '해당 파티션을 file-per-table 테이블스페이스로 이동하세요.',
+          location: fileName,
+          tableName: table.name,
+          code: `PARTITION ${partition.name} TABLESPACE=${partition.tablespace}`,
+          mysqlShellCheckId: 'partitionedTablesInSharedTablespaces',
+          docLink: 'https://dev.mysql.com/doc/refman/8.4/en/partitioning-limitations.html',
+          fixQuery: `ALTER TABLE \`${table.name}\` REORGANIZE PARTITION \`${partition.name}\` INTO (PARTITION \`${partition.name}\` TABLESPACE = innodb_file_per_table);`
         });
       }
     }

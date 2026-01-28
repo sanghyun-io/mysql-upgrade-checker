@@ -711,7 +711,63 @@ CREATE TABLE user_status_no_empty (
   status ENUM('active', 'inactive', 'pending')
 );
 INSERT INTO user_status_no_empty (id, status) VALUES (1, 'active');
-INSERT INTO user_status_no_empty (id, status) VALUES (2, 'pending');`
+INSERT INTO user_status_no_empty (id, status) VALUES (2, 'pending');`,
+
+  // ==============================
+  // SHARED TABLESPACE PARTITION
+  // ==============================
+
+  // Table-level shared tablespace with partition - should produce error
+  sharedTablespacePartition: `
+CREATE TABLE orders (
+  id INT,
+  order_date DATE
+)
+TABLESPACE = mysql
+ENGINE = InnoDB
+PARTITION BY RANGE (YEAR(order_date)) (
+  PARTITION p2023 VALUES LESS THAN (2024),
+  PARTITION p2024 VALUES LESS THAN (2025),
+  PARTITION pmax VALUES LESS THAN MAXVALUE
+);`,
+
+  // Partition-level shared tablespace - should produce error
+  partitionLevelSharedTablespace: `
+CREATE TABLE logs (
+  id INT,
+  log_date DATE
+)
+ENGINE = InnoDB
+PARTITION BY RANGE (YEAR(log_date)) (
+  PARTITION p2023 VALUES LESS THAN (2024) TABLESPACE = mysql,
+  PARTITION p2024 VALUES LESS THAN (2025) TABLESPACE = innodb_system,
+  PARTITION pmax VALUES LESS THAN MAXVALUE
+);`,
+
+  // File-per-table tablespace with partition - should NOT produce error
+  filePerTablePartition: `
+CREATE TABLE events (
+  id INT,
+  event_date DATE
+)
+TABLESPACE = innodb_file_per_table
+ENGINE = InnoDB
+PARTITION BY RANGE (YEAR(event_date)) (
+  PARTITION p2023 VALUES LESS THAN (2024),
+  PARTITION p2024 VALUES LESS THAN (2025)
+);`,
+
+  // No tablespace specified with partition - should NOT produce error
+  noTablespacePartition: `
+CREATE TABLE sales (
+  id INT,
+  sale_date DATE
+)
+ENGINE = InnoDB
+PARTITION BY RANGE (YEAR(sale_date)) (
+  PARTITION p2023 VALUES LESS THAN (2024),
+  PARTITION p2024 VALUES LESS THAN (2025)
+);`
 };
 
 // ============================================================================

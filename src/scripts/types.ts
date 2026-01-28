@@ -196,6 +196,8 @@ export interface TableInfo {
   engine?: string;
   charset?: string;
   collation?: string;
+  /** Table-level tablespace (if specified) */
+  tablespace?: string;
   columns: ColumnInfo[];
   indexes: IndexInfo[];
   foreignKeys: ForeignKeyInfo[];
@@ -238,6 +240,8 @@ export interface PartitionInfo {
   type: string;
   expression?: string;
   description?: string;
+  /** Tablespace for this partition (if specified) */
+  tablespace?: string;
 }
 
 // ============================================================================

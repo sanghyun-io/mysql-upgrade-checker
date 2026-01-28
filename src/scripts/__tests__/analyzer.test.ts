@@ -1115,3 +1115,50 @@ describe('FileAnalyzer - ENUM Empty Value Cross-Validation', () => {
     });
   });
 });
+
+// =============================================================================
+// SHARED TABLESPACE PARTITION VALIDATION (Task 10)
+// =============================================================================
+
+describe('FileAnalyzer - Shared Tablespace Partition Validation', () => {
+  describe('Table-level shared tablespace with partition', () => {
+    it('should report error for table-level shared tablespace', async () => {
+      const issues = await analyzeContent('orders.sql', TWO_PASS_FIXTURES.sharedTablespacePartition);
+
+      const tablespaceIssue = findIssueById(issues, 'partition_shared_tablespace_parsed');
+      expect(tablespaceIssue).toBeDefined();
+      expect(tablespaceIssue?.severity).toBe('error');
+      expect(tablespaceIssue?.description).toContain('mysql');
+      expect(tablespaceIssue?.tableName).toBe('orders');
+    });
+  });
+
+  describe('Partition-level shared tablespace', () => {
+    it('should report error for partition-level shared tablespace', async () => {
+      const issues = await analyzeContent('logs.sql', TWO_PASS_FIXTURES.partitionLevelSharedTablespace);
+
+      const tablespaceIssues = issues.filter(i => i.id === 'partition_shared_tablespace_individual');
+      expect(tablespaceIssues.length).toBeGreaterThanOrEqual(1);
+      expect(tablespaceIssues[0]?.severity).toBe('error');
+      expect(tablespaceIssues[0]?.description).toContain('파티션');
+    });
+  });
+
+  describe('File-per-table tablespace with partition', () => {
+    it('should NOT report error for file-per-table tablespace', async () => {
+      const issues = await analyzeContent('events.sql', TWO_PASS_FIXTURES.filePerTablePartition);
+
+      const tablespaceIssue = findIssueById(issues, 'partition_shared_tablespace_parsed');
+      expect(tablespaceIssue).toBeUndefined();
+    });
+  });
+
+  describe('No tablespace specified with partition', () => {
+    it('should NOT report error when no tablespace specified', async () => {
+      const issues = await analyzeContent('sales.sql', TWO_PASS_FIXTURES.noTablespacePartition);
+
+      const tablespaceIssue = findIssueById(issues, 'partition_shared_tablespace_parsed');
+      expect(tablespaceIssue).toBeUndefined();
+    });
+  });
+});
