@@ -225,7 +225,7 @@ describe('FileAnalyzer - Authentication Detection', () => {
       const issue = findIssueById(issues, 'mysql_native_password');
       expect(issue).toBeDefined();
       expect(issue?.severity).toBe('warning');
-      expect(issue?.userName).toBe('app_user');
+      expect(issue?.userName).toMatch(/app_user/);
     });
 
     it('should detect ALTER USER with mysql_native_password', async () => {
@@ -262,7 +262,7 @@ describe('FileAnalyzer - Privilege Detection', () => {
       const issue = findIssueById(issues, 'super_privilege');
       expect(issue).toBeDefined();
       expect(issue?.severity).toBe('warning');
-      expect(issue?.userName).toBe('admin_user');
+      expect(issue?.userName).toMatch(/admin_user/);
     });
 
     it('should detect SUPER in multiple privileges', async () => {

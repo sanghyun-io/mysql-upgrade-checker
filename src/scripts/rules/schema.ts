@@ -341,19 +341,6 @@ export const invalidObjectsRules: CompatibilityRule[] = [
     mysqlShellCheckId: 'partitionedTablesInSharedTablespaces'
   },
 
-  // Invalid 5.7 Names (trailing spaces, control chars)
-  {
-    id: 'invalid_57_name_trailing_space',
-    type: 'schema',
-    category: 'invalidObjects',
-    pattern: /CREATE\s+TABLE\s+`[^`]*\s`/gi,
-    severity: 'error',
-    title: '테이블명 후행 공백',
-    description: '식별자에 후행 공백이 있습니다.',
-    suggestion: '후행 공백을 제거하세요.',
-    mysqlShellCheckId: 'invalid57Names'
-  },
-
   // Index Too Large (3072 bytes for utf8mb4)
   {
     id: 'index_too_large',

@@ -124,12 +124,12 @@ describe('Removed System Variables Rules', () => {
 describe('New Default Values Rules', () => {
   describe('innodb_adaptive_hash_index rule', () => {
     it('should detect innodb_adaptive_hash_index=ON', () => {
-      expect(testPatternMatch('sys_var_new_default_innodb_adaptive_hash', 'innodb_adaptive_hash_index=ON')).toBe(true);
-      expect(testPatternMatch('sys_var_new_default_innodb_adaptive_hash', 'innodb_adaptive_hash_index = ON')).toBe(true);
+      expect(testPatternMatch('sys_var_new_default_innodb_adaptive_hash_index', 'innodb_adaptive_hash_index=ON')).toBe(true);
+      expect(testPatternMatch('sys_var_new_default_innodb_adaptive_hash_index', 'innodb_adaptive_hash_index = ON')).toBe(true);
     });
 
     it('should NOT match OFF setting', () => {
-      expect(testPatternMatch('sys_var_new_default_innodb_adaptive_hash', 'innodb_adaptive_hash_index=OFF')).toBe(false);
+      expect(testPatternMatch('sys_var_new_default_innodb_adaptive_hash_index', 'innodb_adaptive_hash_index=OFF')).toBe(false);
     });
   });
 
