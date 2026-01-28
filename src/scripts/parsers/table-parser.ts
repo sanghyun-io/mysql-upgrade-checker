@@ -167,20 +167,6 @@ function parseColumnDefinition(definition: string): ColumnInfo | null {
 }
 
 /**
- * Extract base type from type string (e.g., "VARCHAR(255) UNSIGNED" -> "VARCHAR(255)")
- */
-function extractBaseType(typeStr: string): string {
-  // Match type name and optional parameters
-  // Handle cases like: INT, VARCHAR(100), DECIMAL(10,2), ENUM('a','b')
-  const match = typeStr.match(/^([A-Z]+)(\([^)]+\))?/i);
-  if (match) {
-    return match[2] ? match[1] + match[2] : match[1];
-  }
-  // Fallback to first word
-  return typeStr.split(/\s+/)[0];
-}
-
-/**
  * Parse index definitions (PRIMARY KEY, KEY, UNIQUE, etc.)
  */
 function parseIndexes(tableBody: string): IndexInfo[] {

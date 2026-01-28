@@ -376,7 +376,29 @@ export const MYSQL_SHELL_CHECK_IDS = {
 } as const;
 
 // ============================================================================
-// 19. SERVER-REQUIRED CHECKS (cannot be done from static dump analysis)
+// 19. SYSTEM VARIABLE CHECK QUERY (for new defaults detection)
+// ============================================================================
+export const SYSVAR_CHECK_QUERY = `-- 시스템 변수 기본값 검사
+-- 8.4에서 기본값이 변경된 변수들의 현재 값을 확인합니다.
+SELECT
+  VARIABLE_NAME,
+  VARIABLE_VALUE
+FROM performance_schema.global_variables
+WHERE VARIABLE_NAME IN (
+  'replica_parallel_workers',
+  'innodb_adaptive_hash_index',
+  'innodb_doublewrite_pages',
+  'innodb_flush_method',
+  'innodb_io_capacity',
+  'innodb_io_capacity_max',
+  'innodb_log_buffer_size',
+  'innodb_redo_log_capacity',
+  'innodb_change_buffering',
+  'binlog_transaction_dependency_tracking'
+);`;
+
+// ============================================================================
+// 20. SERVER-REQUIRED CHECKS (cannot be done from static dump analysis)
 // ============================================================================
 export interface ServerRequiredCheck {
   id: string;
@@ -1034,25 +1056,3 @@ SELECT
 FROM INFORMATION_SCHEMA.TRIGGERS
 WHERE TRIGGER_SCHEMA NOT IN ('mysql', 'information_schema', 'performance_schema', 'sys');
 `;
-
-// ============================================================================
-// 22. SYSTEM VARIABLE CHECK QUERY (for new defaults detection)
-// ============================================================================
-export const SYSVAR_CHECK_QUERY = `-- 시스템 변수 기본값 검사
--- 8.4에서 기본값이 변경된 변수들의 현재 값을 확인합니다.
-SELECT
-  VARIABLE_NAME,
-  VARIABLE_VALUE
-FROM performance_schema.global_variables
-WHERE VARIABLE_NAME IN (
-  'replica_parallel_workers',
-  'innodb_adaptive_hash_index',
-  'innodb_doublewrite_pages',
-  'innodb_flush_method',
-  'innodb_io_capacity',
-  'innodb_io_capacity_max',
-  'innodb_log_buffer_size',
-  'innodb_redo_log_capacity',
-  'innodb_change_buffering',
-  'binlog_transaction_dependency_tracking'
-);`;

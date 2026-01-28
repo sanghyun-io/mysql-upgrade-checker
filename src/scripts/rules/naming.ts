@@ -4,7 +4,7 @@
  */
 
 import type { CompatibilityRule } from '../types';
-import { NEW_RESERVED_KEYWORDS_84, INVALID_57_NAME_PATTERNS } from '../constants';
+import { NEW_RESERVED_KEYWORDS_84 } from '../constants';
 
 // ============================================================================
 // RESERVED KEYWORDS RULES
