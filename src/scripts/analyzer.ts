@@ -448,6 +448,7 @@ export class FileAnalyzer {
             ...rule,
             location: fileName,
             code: match[0],
+            matchedText: 'SUPER',
             userName: userName,
             privilege: 'SUPER',
             fixQuery: rule.generateFixQuery?.({ userName }) || null
@@ -477,6 +478,7 @@ export class FileAnalyzer {
             ...rule,
             location: fileName,
             code: match[0].substring(0, 200),
+            matchedText: 'mysql_native_password',
             userName: userName,
             fixQuery: rule.generateFixQuery?.({ userName }) || null
           });
@@ -491,6 +493,7 @@ export class FileAnalyzer {
             ...rule,
             location: fileName,
             code: match[0].substring(0, 200),
+            matchedText: 'sha256_password',
             userName: userName
           });
         }
@@ -504,6 +507,7 @@ export class FileAnalyzer {
             ...rule,
             location: fileName,
             code: match[0].substring(0, 200),
+            matchedText: 'authentication_fido',
             userName: userName
           });
         }
@@ -525,6 +529,7 @@ export class FileAnalyzer {
             ...rule,
             location: fileName,
             code: match[0].substring(0, 200),
+            matchedText: 'mysql_native_password',
             userName: userName,
             fixQuery: rule.generateFixQuery?.({ userName }) || null
           });
@@ -569,6 +574,7 @@ export class FileAnalyzer {
               ...rule,
               location: `${fileName} - Table: ${tableName}`,
               code: valuesStr.substring(0, 200) + '...',
+              matchedText: dateMatch[0],
               tableName: tableName,
               columnName: columnName,
               fixQuery: rule.generateFixQuery?.({ tableName, columnName }) || null

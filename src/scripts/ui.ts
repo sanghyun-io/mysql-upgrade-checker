@@ -463,6 +463,11 @@ export class UIManager {
       ? `<a href="${issue.docLink}" target="_blank" class="doc-link" title="MySQL 공식 문서">📖 문서</a>`
       : '';
 
+    // Highlight matched text in code if available
+    const codeHtml = issue.code
+      ? `<div class="issue-code">${this.highlightMatchedText(issue.code, issue.matchedText)}</div>`
+      : '';
+
     return `
       <div class="issue-card ${issue.severity}">
         <div class="issue-header">
@@ -472,7 +477,7 @@ export class UIManager {
         </div>
         <div class="issue-description">${issue.description}</div>
         ${issue.location ? `<div class="issue-location">📍 위치: ${issue.location}</div>` : ''}
-        ${issue.code ? `<div class="issue-code">${this.escapeHtml(issue.code)}</div>` : ''}
+        ${codeHtml}
         ${
           issue.dataSample
             ? `
@@ -512,6 +517,30 @@ export class UIManager {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
+  }
+
+  /**
+   * Highlight matched text within code
+   * Returns HTML with the matched portion wrapped in a highlight span
+   */
+  private highlightMatchedText(code: string, matchedText?: string): string {
+    const escapedCode = this.escapeHtml(code);
+
+    if (!matchedText) {
+      return escapedCode;
+    }
+
+    // Escape the matched text for safe HTML display
+    const escapedMatch = this.escapeHtml(matchedText);
+
+    // Find and highlight all occurrences of the matched text
+    // Use case-insensitive matching since SQL is case-insensitive
+    const regex = new RegExp(
+      escapedMatch.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'),
+      'gi'
+    );
+
+    return escapedCode.replace(regex, '<mark class="code-highlight">$&</mark>');
   }
 
   // ==========================================================================
