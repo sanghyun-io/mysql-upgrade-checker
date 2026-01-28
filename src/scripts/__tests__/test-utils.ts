@@ -370,6 +370,108 @@ export const JSON_FIXTURES = {
 };
 
 // ============================================================================
+// 2-PASS ANALYSIS FIXTURES (FK Validation & ENUM Length)
+// ============================================================================
+
+export const TWO_PASS_FIXTURES = {
+  // FK referencing PRIMARY KEY - should NOT produce warning
+  fkWithPrimaryKey: {
+    parent: `
+CREATE TABLE users (
+  id INT PRIMARY KEY,
+  name VARCHAR(100)
+);`,
+    child: `
+CREATE TABLE orders (
+  id INT PRIMARY KEY,
+  user_id INT,
+  FOREIGN KEY (user_id) REFERENCES users(id)
+);`
+  },
+
+  // FK referencing UNIQUE index - should NOT produce warning
+  fkWithUniqueIndex: {
+    parent: `
+CREATE TABLE categories (
+  id INT,
+  code VARCHAR(50),
+  name VARCHAR(100),
+  UNIQUE KEY idx_code (code)
+);`,
+    child: `
+CREATE TABLE products (
+  id INT PRIMARY KEY,
+  category_code VARCHAR(50),
+  FOREIGN KEY (category_code) REFERENCES categories(code)
+);`
+  },
+
+  // FK referencing non-indexed column - should produce ERROR
+  fkWithoutIndex: {
+    parent: `
+CREATE TABLE departments (
+  id INT PRIMARY KEY,
+  dept_code VARCHAR(10),
+  name VARCHAR(100),
+  KEY idx_name (name)
+);`,
+    child: `
+CREATE TABLE employees (
+  id INT PRIMARY KEY,
+  dept_code VARCHAR(10),
+  FOREIGN KEY (dept_code) REFERENCES departments(dept_code)
+);`
+  },
+
+  // ENUM with element exceeding 255 chars - should produce ERROR
+  enumTooLong: `
+CREATE TABLE status_codes (
+  id INT PRIMARY KEY,
+  status ENUM('active', 'inactive', '${'x'.repeat(260)}')
+);`,
+
+  // ENUM with normal elements - should NOT produce warning
+  enumNormal: `
+CREATE TABLE user_types (
+  id INT PRIMARY KEY,
+  type ENUM('admin', 'user', 'guest', 'moderator')
+);`,
+
+  // UTF-8 charset with 4-byte data - should produce warning
+  utf8With4ByteChars: {
+    schema: `
+CREATE TABLE messages_utf8 (
+  id INT PRIMARY KEY,
+  content VARCHAR(255)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;`,
+    data: `
+INSERT INTO messages_utf8 (id, content) VALUES (1, 'Hello 😀 World');`
+  },
+
+  // utf8mb4 charset with 4-byte data - should NOT produce warning
+  utf8mb4With4ByteChars: {
+    schema: `
+CREATE TABLE messages_utf8mb4 (
+  id INT PRIMARY KEY,
+  content VARCHAR(255)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;`,
+    data: `
+INSERT INTO messages_utf8mb4 (id, content) VALUES (1, 'Hello 😀 World');`
+  },
+
+  // utf8mb3 explicit charset with 4-byte data - should produce warning
+  utf8mb3With4ByteChars: {
+    schema: `
+CREATE TABLE messages_utf8mb3 (
+  id INT PRIMARY KEY,
+  content VARCHAR(255)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3;`,
+    data: `
+INSERT INTO messages_utf8mb3 (id, content) VALUES (1, 'Hello 🎉 Party');`
+  }
+};
+
+// ============================================================================
 // EXPECTED RESULTS HELPERS
 // ============================================================================
 

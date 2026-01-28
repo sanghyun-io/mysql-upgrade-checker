@@ -241,6 +241,64 @@ export interface PartitionInfo {
 }
 
 // ============================================================================
+// TABLE INDEX MAP (for FK reference validation)
+// ============================================================================
+
+/**
+ * Stores index information for a table used in FK validation
+ */
+export interface TableIndexInfo {
+  tableName: string;
+  schemaName?: string;
+  primaryKey?: string[];
+  uniqueIndexes: Array<{ name: string; columns: string[] }>;
+  regularIndexes: Array<{ name: string; columns: string[] }>;
+}
+
+// ============================================================================
+// TABLE CHARSET MAP (for 4-byte UTF-8 cross-validation)
+// ============================================================================
+
+/**
+ * Stores charset information for a table and its columns
+ */
+export interface TableCharsetInfo {
+  tableName: string;
+  tableCharset?: string;
+  tableCollation?: string;
+  columns: Map<string, ColumnCharsetInfo>;
+}
+
+export interface ColumnCharsetInfo {
+  charset?: string;
+  collation?: string;
+  type: string;
+}
+
+/**
+ * Map of table names to their charset information
+ */
+export type TableCharsetMap = Map<string, TableCharsetInfo>;
+
+/**
+ * Map of table names to their index information
+ */
+export type TableIndexMap = Map<string, TableIndexInfo>;
+
+/**
+ * Pending FK check to be validated after collecting all table indexes
+ */
+export interface PendingFKCheck {
+  issueId: string;
+  sourceTable: string;
+  sourceColumns: string[];
+  refTable: string;
+  refColumns: string[];
+  location: string;
+  code: string;
+}
+
+// ============================================================================
 // USER/PRIVILEGE INFO
 // ============================================================================
 export interface UserInfo {

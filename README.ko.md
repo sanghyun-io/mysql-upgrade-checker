@@ -328,6 +328,13 @@ mysql-upgrade-checker/
     ↓
 FileAnalyzer.analyzeFiles()
     ↓
+┌─────────────────────────────────────┐
+│  2-Pass 분석                        │
+│  ├── Pass 1: 테이블 인덱스 수집     │
+│  ├── Pass 2: 전체 분석              │
+│  └── Pass 2.5: FK 참조 검증         │
+└─────────────────────────────────────┘
+    ↓
 규칙 패턴 매칭 (67개 규칙)
     ↓
 이슈 생성
@@ -336,6 +343,10 @@ UIManager.displayResults()
     ↓
 리포트 내보내기 (JSON/CSV/MySQL Shell)
 ```
+
+**2-Pass 분석**으로 파일 간 교차 검증 가능:
+- 외래키 참조가 실제 PRIMARY KEY/UNIQUE 인덱스 기준으로 검증됨
+- ENUM 요소 길이가 구체적인 값과 함께 검사됨
 
 ---
 

@@ -248,17 +248,8 @@ export const invalidObjectsRules: CompatibilityRule[] = [
   },
 
   // ENUM/SET Element Length
-  {
-    id: 'enum_element_length',
-    type: 'schema',
-    category: 'invalidObjects',
-    pattern: /ENUM\s*\([^)]+\)/gi,
-    severity: 'warning',
-    title: 'ENUM 요소 길이 확인 필요',
-    description: `각 ENUM 요소는 ${IDENTIFIER_LIMITS.ENUM_ELEMENT}자를 초과할 수 없습니다.`,
-    suggestion: 'ENUM 요소 길이를 확인하고 255자 이내로 유지하세요.',
-    mysqlShellCheckId: 'enumSetElementLength'
-  },
+  // NOTE: This rule is now handled by 2-pass analysis in analyzer.ts (checkEnumElementLengths)
+  // which provides specific value information for elements exceeding 255 characters
 
   // FTS Table Name Prefix
   {
@@ -407,17 +398,8 @@ export const invalidObjectsRules: CompatibilityRule[] = [
   },
 
   // Foreign Key References Non-Unique Index
-  {
-    id: 'fk_non_unique_index',
-    type: 'schema',
-    category: 'invalidObjects',
-    pattern: /FOREIGN\s+KEY\s*\([^)]+\)\s*REFERENCES\s+[^(]+\([^)]+\)/gi,
-    severity: 'info',
-    title: '외래키 참조 검증 필요',
-    description: '외래키가 참조하는 컬럼은 PRIMARY KEY 또는 UNIQUE 인덱스여야 합니다.',
-    suggestion: '참조 대상 컬럼에 적절한 인덱스가 있는지 확인하세요.',
-    mysqlShellCheckId: 'foreignKeyReferences'
-  },
+  // NOTE: This rule is now handled by 2-pass analysis in analyzer.ts (validateForeignKeyReferences)
+  // which validates FK references against actually collected table index information
 
   // MAXDB SQL Mode (specific check)
   {

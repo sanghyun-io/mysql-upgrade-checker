@@ -328,6 +328,13 @@ File Selection
       ↓
 FileAnalyzer.analyzeFiles()
       ↓
+┌─────────────────────────────────────┐
+│  2-Pass Analysis                    │
+│  ├── Pass 1: Collect table indexes  │
+│  ├── Pass 2: Full analysis          │
+│  └── Pass 2.5: FK validation        │
+└─────────────────────────────────────┘
+      ↓
 Rule Pattern Matching (67 rules)
       ↓
 Issue Generation
@@ -336,6 +343,10 @@ UIManager.displayResults()
       ↓
 Report Export (JSON/CSV/MySQL Shell)
 ```
+
+**2-Pass Analysis** enables cross-file validation:
+- Foreign key references are validated against actual PRIMARY KEY/UNIQUE indexes
+- ENUM element lengths are checked with specific value reporting
 
 ---
 

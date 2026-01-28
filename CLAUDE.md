@@ -24,13 +24,25 @@ MySQL 8.0 → 8.4 Upgrade Compatibility Checker - a client-side web tool that an
 File Selection → FileAnalyzer.analyzeFiles() → CompatibilityRules matching → UIManager.displayResults()
 ```
 
+### 2-Pass Analysis (for FK Index Validation)
+
+```
+Pass 1: Collect table indexes from all SQL files (PRIMARY KEY, UNIQUE indexes)
+    ↓
+Pass 2: Full analysis + collect FK references
+    ↓
+Pass 2.5: Validate FK references against collected indexes
+    - FK → PRIMARY KEY/UNIQUE: No warning
+    - FK → Non-indexed column: ERROR with fix query
+```
+
 ### Key Files
 
 | File | Purpose |
 |------|---------|
 | `src/scripts/main.ts` | Entry point, tab navigation, global event handlers |
 | `src/scripts/analyzer.ts` | `FileAnalyzer` class - parses SQL/TSV/JSON/config files and runs compatibility checks |
-| `src/scripts/rules.ts` | `compatibilityRules` array - 47 rules based on MySQL Shell's `checkForServerUpgrade()` |
+| `src/scripts/rules/` | Modular rule definitions - 67 rules based on MySQL Shell's `checkForServerUpgrade()` |
 | `src/scripts/constants.ts` | Reference data: removed variables, reserved keywords, deprecated features |
 | `src/scripts/types.ts` | TypeScript interfaces for rules, issues, and analysis results |
 | `src/scripts/ui.ts` | `UIManager` class - renders results grouped by category |
@@ -93,10 +105,25 @@ GitHub 저장소 → Actions 탭 → "Deploy to GitHub Pages" → "Run workflow"
 ## Adding New Rules
 
 1. Add constants to `constants.ts` if needed (e.g., new removed variables)
-2. Create rule in `rules.ts` with:
+2. Create rule in appropriate file under `rules/` folder:
+   - `auth.ts` - Authentication rules
+   - `data.ts` - Data integrity rules
+   - `naming.ts` - Reserved keywords/naming rules
+   - `privilege.ts` - Privilege rules
+   - `schema.ts` - Schema/object rules
+   - `storage.ts` - Storage engine rules
+   - `sysvar.ts` - System variable rules
+3. Rule structure:
    - Unique `id`
    - `type`: schema/data/query/config/privilege
    - `category`: one of the 7 RuleCategories
    - `pattern`: RegExp for detection (or `detectInData`/`detectInConfig` functions)
    - `generateFixQuery`: optional function returning SQL fix
-3. Rules are automatically included via `compatibilityRules` export
+4. Rules are automatically included via barrel export in `rules/index.ts`
+
+### 2-Pass Analysis Rules
+
+For rules requiring cross-file validation (e.g., FK index validation):
+- Implement collection logic in `analyzer.ts` during Pass 1
+- Implement validation logic in `analyzer.ts` after Pass 2
+- See `collectTableIndexes()` and `validateForeignKeyReferences()` as examples

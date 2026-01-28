@@ -176,7 +176,21 @@ function parseIndexes(tableBody: string): IndexInfo[] {
   for (const line of lines) {
     const trimmed = line.trim();
 
-    // PRIMARY KEY
+    // Check for inline PRIMARY KEY in column definition (e.g., `id INT PRIMARY KEY`)
+    // This matches column definitions that end with PRIMARY KEY
+    const inlinePrimaryMatch = trimmed.match(/^(?:`([^`]+)`|(\w+))\s+\w+[^,]*\bPRIMARY\s+KEY\b/i);
+    if (inlinePrimaryMatch && !/^PRIMARY\s+KEY/i.test(trimmed)) {
+      const columnName = inlinePrimaryMatch[1] || inlinePrimaryMatch[2];
+      indexes.push({
+        name: 'PRIMARY',
+        columns: [columnName],
+        unique: true,
+        type: 'PRIMARY'
+      });
+      continue;
+    }
+
+    // PRIMARY KEY (explicit constraint definition)
     const primaryMatch = trimmed.match(/PRIMARY\s+KEY\s*\(/i);
     if (primaryMatch) {
       // Find column list with nested parens handling

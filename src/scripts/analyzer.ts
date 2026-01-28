@@ -9,7 +9,13 @@ import type {
   TableSchemas,
   ConfigSection,
   AnalysisProgress,
-  TableInfo
+  TableInfo,
+  TableIndexInfo,
+  TableIndexMap,
+  PendingFKCheck,
+  TableCharsetInfo,
+  TableCharsetMap,
+  ColumnCharsetInfo
 } from './types';
 import { compatibilityRules } from './rules';
 import { REMOVED_SYS_VARS_84, SYS_VARS_NEW_DEFAULTS_84 } from './constants';
@@ -38,6 +44,16 @@ export class FileAnalyzer {
   // Callbacks for real-time updates
   private onIssue: OnIssueCallback | null = null;
   private onProgress: OnProgressCallback | null = null;
+
+  // 2-Pass analysis: table index map for FK reference validation
+  private tableIndexMap: TableIndexMap = new Map();
+  private pendingFKChecks: PendingFKCheck[] = [];
+
+  // 2-Pass analysis: table charset map for 4-byte UTF-8 cross-validation
+  private tableCharsetMap: TableCharsetMap = new Map();
+
+  // Files content cache for 2-pass analysis
+  private fileContentsCache: Map<string, string> = new Map();
 
   // Set callbacks for real-time updates
   setCallbacks(onIssue: OnIssueCallback | null, onProgress: OnProgressCallback | null): void {
@@ -75,6 +91,27 @@ export class FileAnalyzer {
       }
     };
 
+    // Reset 2-pass analysis state
+    this.tableIndexMap.clear();
+    this.tableCharsetMap.clear();
+    this.pendingFKChecks = [];
+    this.fileContentsCache.clear();
+
+    // ========================================================================
+    // PASS 1: Collect table index and charset information from all SQL files
+    // ========================================================================
+    for (const file of files) {
+      if (file.name.endsWith('.sql')) {
+        const content = await this.readFileContent(file);
+        this.fileContentsCache.set(file.name, content);
+        this.collectTableIndexes(content, file.name);
+        this.collectTableCharsets(content, file.name);
+      }
+    }
+
+    // ========================================================================
+    // PASS 2: Full analysis with FK validation capability
+    // ========================================================================
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
       const fileType = this.detectFileType(file.name);
@@ -107,6 +144,14 @@ export class FileAnalyzer {
       }
     }
 
+    // ========================================================================
+    // PASS 2.5: Validate FK references using collected table index info
+    // ========================================================================
+    this.validateForeignKeyReferences();
+
+    // Clean up cache
+    this.fileContentsCache.clear();
+
     return this.results;
   }
 
@@ -128,7 +173,8 @@ export class FileAnalyzer {
   }
 
   private async analyzeFile(file: File): Promise<void> {
-    const content = await this.readFileContent(file);
+    // Use cached content for SQL files (from Pass 1), otherwise read fresh
+    const content = this.fileContentsCache.get(file.name) ?? await this.readFileContent(file);
     const fileName = file.name;
     const lowerName = fileName.toLowerCase();
 
@@ -543,15 +589,20 @@ export class FileAnalyzer {
         }
       }
 
-      // 4-byte UTF-8 character check
+      // 4-byte UTF-8 character check - only warn if table doesn't support utf8mb4
       const has4ByteChars = /[\u{10000}-\u{10FFFF}]/u.test(valuesStr);
-      if (has4ByteChars) {
+      if (has4ByteChars && !this.supports4ByteUtf8(tableName)) {
         const rule = compatibilityRules.find((r) => r.id === 'data_4byte_chars');
         if (rule) {
+          // Get table charset info for better error message
+          const charsetInfo = this.tableCharsetMap.get(tableName.toLowerCase());
+          const currentCharset = charsetInfo?.tableCharset || 'unknown';
+
           this.addIssue({
             ...rule,
             location: `${fileName} - Table: ${tableName}`,
             code: valuesStr.substring(0, 200) + '...',
+            description: `테이블 '${tableName}'에 4바이트 UTF-8 문자(이모지 등)가 포함되어 있으나, 현재 문자셋(${currentCharset})은 4바이트 문자를 지원하지 않습니다.`,
             tableName: tableName,
             fixQuery: rule.generateFixQuery?.({ tableName }) || null
           });
@@ -586,15 +637,19 @@ export class FileAnalyzer {
     for (const line of lines.slice(0, 1000)) {
       lineNum++;
 
-      // 4-byte character check
-      if (/[\u{10000}-\u{10FFFF}]/u.test(line)) {
+      // 4-byte character check - only warn if table doesn't support utf8mb4
+      if (/[\u{10000}-\u{10FFFF}]/u.test(line) && !this.supports4ByteUtf8(tableName)) {
+        // Get table charset info for better error message
+        const charsetInfo = this.tableCharsetMap.get(tableName.toLowerCase());
+        const currentCharset = charsetInfo?.tableCharset || 'unknown';
+
         this.addIssue({
           id: 'data_4byte_chars',
           type: 'data',
           category: 'dataIntegrity',
           severity: 'warning',
           title: '4바이트 UTF-8 문자 발견 (데이터)',
-          description: `TSV 데이터에 이모지 또는 4바이트 UTF-8 문자가 포함되어 있습니다.`,
+          description: `테이블 '${tableName}'의 TSV 데이터에 4바이트 UTF-8 문자(이모지 등)가 포함되어 있으나, 현재 문자셋(${currentCharset})은 4바이트 문자를 지원하지 않습니다.`,
           suggestion: '테이블 문자셋을 utf8mb4로 설정해야 합니다.',
           location: `${fileName}:${lineNum}`,
           code: line.substring(0, 100) + '...',
@@ -631,6 +686,14 @@ export class FileAnalyzer {
         if (table.partitions && table.partitions.length > 0) {
           this.checkPartitions(table, fileName);
         }
+
+        // Collect FK references for 2-pass validation
+        if (table.foreignKeys && table.foreignKeys.length > 0) {
+          this.collectForeignKeyReferences(table, fileName);
+        }
+
+        // Check ENUM element lengths with specific values
+        this.checkEnumElementLengths(table, fileName);
       }
     }
   }
@@ -821,6 +884,311 @@ export class FileAnalyzer {
     }
   }
 
+  /**
+   * Check ENUM/SET element lengths - reports specific values exceeding 255 characters
+   */
+  private checkEnumElementLengths(table: TableInfo, fileName: string): void {
+    const MAX_ENUM_LENGTH = 255;
+
+    for (const column of table.columns) {
+      const columnType = column.type.toUpperCase();
+
+      // Check ENUM types
+      if (columnType.startsWith('ENUM')) {
+        const enumValues = this.extractEnumValues(column.type);
+
+        for (const value of enumValues) {
+          if (value.length > MAX_ENUM_LENGTH) {
+            // Truncate long value for display
+            const displayValue = value.length > 50
+              ? value.substring(0, 47) + '...'
+              : value;
+
+            this.addIssue({
+              id: 'enum_element_length_exceeded',
+              type: 'schema',
+              category: 'invalidObjects',
+              severity: 'error',
+              title: 'ENUM 요소 길이 초과',
+              description: `${table.name}.${column.name} 컬럼의 ENUM 값 '${displayValue}'가 ${value.length}자입니다 (최대 ${MAX_ENUM_LENGTH}자).`,
+              suggestion: 'ENUM 요소 길이를 255자 이내로 줄이세요.',
+              location: fileName,
+              tableName: table.name,
+              columnName: column.name,
+              columnType: column.type,
+              enumValues: enumValues,
+              code: `${column.name} ${column.type.substring(0, 100)}${column.type.length > 100 ? '...' : ''}`,
+              mysqlShellCheckId: 'enumSetElementLength'
+            });
+          }
+        }
+      }
+
+      // Check SET types similarly
+      if (columnType.startsWith('SET')) {
+        const setValues = this.extractSetValues(column.type);
+
+        for (const value of setValues) {
+          if (value.length > MAX_ENUM_LENGTH) {
+            const displayValue = value.length > 50
+              ? value.substring(0, 47) + '...'
+              : value;
+
+            this.addIssue({
+              id: 'set_element_length_exceeded',
+              type: 'schema',
+              category: 'invalidObjects',
+              severity: 'error',
+              title: 'SET 요소 길이 초과',
+              description: `${table.name}.${column.name} 컬럼의 SET 값 '${displayValue}'가 ${value.length}자입니다 (최대 ${MAX_ENUM_LENGTH}자).`,
+              suggestion: 'SET 요소 길이를 255자 이내로 줄이세요.',
+              location: fileName,
+              tableName: table.name,
+              columnName: column.name,
+              columnType: column.type,
+              code: `${column.name} ${column.type.substring(0, 100)}${column.type.length > 100 ? '...' : ''}`,
+              mysqlShellCheckId: 'enumSetElementLength'
+            });
+          }
+        }
+      }
+    }
+  }
+
+  /**
+   * Extract SET values from SET type definition
+   */
+  private extractSetValues(setType: string): string[] {
+    const match = setType.match(/SET\s*\(([^)]+)\)/i);
+    if (match) {
+      return match[1].split(',').map((v) => v.trim().replace(/^['"]|['"]$/g, ''));
+    }
+    return [];
+  }
+
+  // ==========================================================================
+  // 2-PASS ANALYSIS: TABLE INDEX COLLECTION & FK VALIDATION
+  // ==========================================================================
+
+  /**
+   * Pass 1: Collect table index information from SQL content
+   * Extracts PRIMARY KEY and UNIQUE indexes for FK reference validation
+   */
+  private collectTableIndexes(content: string, fileName: string): void {
+    const createTablePattern = /CREATE TABLE[\s\S]+?;/gi;
+    const matches = content.matchAll(createTablePattern);
+
+    for (const match of matches) {
+      const table = parseCreateTable(match[0]);
+      if (!table) continue;
+
+      const tableInfo: TableIndexInfo = {
+        tableName: table.name,
+        primaryKey: undefined,
+        uniqueIndexes: [],
+        regularIndexes: []
+      };
+
+      // Extract indexes from parsed table
+      for (const index of table.indexes) {
+        if (index.type === 'PRIMARY' || index.name === 'PRIMARY') {
+          tableInfo.primaryKey = index.columns;
+        } else if (index.unique) {
+          tableInfo.uniqueIndexes.push({
+            name: index.name,
+            columns: index.columns
+          });
+        } else {
+          tableInfo.regularIndexes.push({
+            name: index.name,
+            columns: index.columns
+          });
+        }
+      }
+
+      // Store with table name as key (lowercase for case-insensitive matching)
+      this.tableIndexMap.set(table.name.toLowerCase(), tableInfo);
+    }
+  }
+
+  /**
+   * Pass 1: Collect table charset information from SQL content
+   * Used for 4-byte UTF-8 cross-validation
+   */
+  private collectTableCharsets(content: string, fileName: string): void {
+    const createTablePattern = /CREATE TABLE[\s\S]+?;/gi;
+    const matches = content.matchAll(createTablePattern);
+
+    for (const match of matches) {
+      const table = parseCreateTable(match[0]);
+      if (!table) continue;
+
+      const charsetInfo: TableCharsetInfo = {
+        tableName: table.name,
+        tableCharset: table.charset?.toLowerCase(),
+        tableCollation: table.collation?.toLowerCase(),
+        columns: new Map()
+      };
+
+      // Collect column charset info
+      for (const column of table.columns) {
+        const colCharsetInfo: ColumnCharsetInfo = {
+          charset: column.charset?.toLowerCase(),
+          collation: column.collation?.toLowerCase(),
+          type: column.type
+        };
+        charsetInfo.columns.set(column.name.toLowerCase(), colCharsetInfo);
+      }
+
+      // Store with table name as key (lowercase for case-insensitive matching)
+      this.tableCharsetMap.set(table.name.toLowerCase(), charsetInfo);
+    }
+  }
+
+  /**
+   * Check if a table or column uses utf8mb4 charset
+   * Returns true if the charset supports 4-byte UTF-8 characters
+   */
+  private supports4ByteUtf8(tableName: string, columnName?: string): boolean {
+    const tableKey = tableName.toLowerCase();
+    const charsetInfo = this.tableCharsetMap.get(tableKey);
+
+    if (!charsetInfo) {
+      // Table not found in charset map - assume it might have issues
+      return false;
+    }
+
+    if (columnName) {
+      const colKey = columnName.toLowerCase();
+      const colInfo = charsetInfo.columns.get(colKey);
+
+      if (colInfo?.charset) {
+        // Column has explicit charset
+        return colInfo.charset === 'utf8mb4';
+      }
+    }
+
+    // Fall back to table charset
+    if (charsetInfo.tableCharset) {
+      return charsetInfo.tableCharset === 'utf8mb4';
+    }
+
+    // No charset info - assume potential issue
+    return false;
+  }
+
+  /**
+   * Collect FK references from SQL content and add to pending checks
+   */
+  private collectForeignKeyReferences(table: TableInfo, fileName: string): void {
+    for (const fk of table.foreignKeys) {
+      this.pendingFKChecks.push({
+        issueId: `fk_${table.name}_${fk.name}`,
+        sourceTable: table.name,
+        sourceColumns: fk.columns,
+        refTable: fk.refTable,
+        refColumns: fk.refColumns,
+        location: fileName,
+        code: `FOREIGN KEY (${fk.columns.join(', ')}) REFERENCES ${fk.refTable}(${fk.refColumns.join(', ')})`
+      });
+    }
+  }
+
+  /**
+   * Pass 2.5: Validate FK references against collected table indexes
+   * Only adds issues for FKs that reference columns without proper indexes
+   */
+  private validateForeignKeyReferences(): void {
+    for (const fkCheck of this.pendingFKChecks) {
+      const refTableKey = fkCheck.refTable.toLowerCase();
+      const refTableInfo = this.tableIndexMap.get(refTableKey);
+
+      if (!refTableInfo) {
+        // Referenced table not found in dump - add info-level notice
+        this.addIssue({
+          id: 'fk_ref_table_not_found',
+          type: 'schema',
+          category: 'invalidObjects',
+          severity: 'info',
+          title: '외래키 참조 테이블 미발견',
+          description: `${fkCheck.sourceTable}의 외래키가 참조하는 테이블 '${fkCheck.refTable}'이 덤프에 포함되어 있지 않습니다.`,
+          suggestion: '참조 테이블이 다른 스키마에 있거나 덤프에 포함되지 않았을 수 있습니다.',
+          location: fkCheck.location,
+          tableName: fkCheck.sourceTable,
+          code: fkCheck.code,
+          mysqlShellCheckId: 'foreignKeyReferences'
+        });
+        continue;
+      }
+
+      // Check if referenced columns have a proper index (PRIMARY KEY or UNIQUE)
+      const hasProperIndex = this.hasProperIndexOnColumns(refTableInfo, fkCheck.refColumns);
+
+      if (!hasProperIndex) {
+        // Referenced columns don't have PRIMARY KEY or UNIQUE index - this is an error
+        this.addIssue({
+          id: 'fk_non_unique_ref',
+          type: 'schema',
+          category: 'invalidObjects',
+          severity: 'error',
+          title: '외래키 참조 인덱스 누락',
+          description: `${fkCheck.sourceTable}의 외래키가 ${fkCheck.refTable}.${fkCheck.refColumns.join(', ')}을(를) 참조하지만, 해당 컬럼에 PRIMARY KEY 또는 UNIQUE 인덱스가 없습니다.`,
+          suggestion: `참조 대상 테이블에 UNIQUE 인덱스를 추가하세요.`,
+          location: fkCheck.location,
+          tableName: fkCheck.sourceTable,
+          code: fkCheck.code,
+          mysqlShellCheckId: 'foreignKeyReferences',
+          fixQuery: `ALTER TABLE \`${fkCheck.refTable}\` ADD UNIQUE INDEX \`idx_${fkCheck.refColumns.join('_')}\` (\`${fkCheck.refColumns.join('`, `')}\`);`
+        });
+      }
+      // If hasProperIndex is true, no issue is added - the FK is valid
+    }
+  }
+
+  /**
+   * Check if the referenced columns have a PRIMARY KEY or UNIQUE index
+   * The index must be on exactly the referenced columns (as prefix)
+   */
+  private hasProperIndexOnColumns(tableInfo: TableIndexInfo, refColumns: string[]): boolean {
+    const refColsLower = refColumns.map(c => c.toLowerCase());
+
+    // Check PRIMARY KEY
+    if (tableInfo.primaryKey) {
+      const pkColsLower = tableInfo.primaryKey.map(c => c.toLowerCase());
+      if (this.isIndexPrefixMatch(pkColsLower, refColsLower)) {
+        return true;
+      }
+    }
+
+    // Check UNIQUE indexes
+    for (const uniqueIndex of tableInfo.uniqueIndexes) {
+      const indexColsLower = uniqueIndex.columns.map(c => c.toLowerCase());
+      if (this.isIndexPrefixMatch(indexColsLower, refColsLower)) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  /**
+   * Check if index columns match or are a prefix of referenced columns
+   * FK can reference a prefix of a composite index
+   */
+  private isIndexPrefixMatch(indexCols: string[], refCols: string[]): boolean {
+    if (refCols.length > indexCols.length) {
+      return false;
+    }
+
+    for (let i = 0; i < refCols.length; i++) {
+      if (indexCols[i] !== refCols[i]) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
   // ==========================================================================
   // HELPER METHODS
   // ==========================================================================
@@ -888,10 +1256,68 @@ export class FileAnalyzer {
   }
 
   private extractContext(content: string, position: number, length: number): string {
-    const start = Math.max(0, position - length / 2);
-    const end = Math.min(content.length, position + length / 2);
+    let start = Math.max(0, position - length / 2);
+    let end = Math.min(content.length, position + length / 2);
+
+    // Try to find better start boundary (statement keyword or line start)
+    if (start > 0) {
+      // Look for SQL statement keywords before the start position
+      const searchStart = Math.max(0, start - 100);
+      const beforeText = content.substring(searchStart, start + 50);
+      const keywordMatch = beforeText.match(/(?:^|\n|;)\s*(CREATE|ALTER|INSERT|UPDATE|DELETE|GRANT|SET|CALL|PREPARE)\s/gi);
+      if (keywordMatch) {
+        // Find the last keyword match position
+        const lastMatch = keywordMatch[keywordMatch.length - 1];
+        const keywordPos = beforeText.lastIndexOf(lastMatch);
+        if (keywordPos >= 0) {
+          const newStart = searchStart + keywordPos;
+          // Only use if it's not too far back
+          if (newStart >= start - 150) {
+            start = newStart;
+            // Skip leading newline/semicolon
+            while (start < position && (content[start] === '\n' || content[start] === ';' || content[start] === ' ')) {
+              start++;
+            }
+          }
+        }
+      } else {
+        // Fall back to finding nearest newline
+        const newlinePos = content.lastIndexOf('\n', start);
+        if (newlinePos >= 0 && newlinePos >= start - 50) {
+          start = newlinePos + 1;
+        }
+      }
+    }
+
+    // Try to find better end boundary
+    if (end < content.length) {
+      // Look for statement end (;) or newline after end position
+      const semicolonPos = content.indexOf(';', end - 20);
+      const newlinePos = content.indexOf('\n', end);
+      if (semicolonPos >= 0 && semicolonPos <= end + 50) {
+        end = semicolonPos + 1;
+      } else if (newlinePos >= 0 && newlinePos <= end + 30) {
+        end = newlinePos;
+      }
+    }
+
     let context = content.substring(start, end);
-    return context.trim();
+
+    // Add ellipsis markers if truncated
+    const wasStartTruncated = start > 0;
+    const wasEndTruncated = end < content.length;
+
+    context = context.trim();
+
+    if (wasStartTruncated && !context.startsWith('CREATE') && !context.startsWith('ALTER') &&
+        !context.startsWith('INSERT') && !context.startsWith('GRANT') && !context.startsWith('SET')) {
+      context = '...' + context;
+    }
+    if (wasEndTruncated && !context.endsWith(';')) {
+      context = context + '...';
+    }
+
+    return context;
   }
 
   // ==========================================================================

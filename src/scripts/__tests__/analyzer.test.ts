@@ -14,7 +14,8 @@ import {
   AUTH_FIXTURES,
   CONFIG_FIXTURES,
   TSV_FIXTURES,
-  JSON_FIXTURES
+  JSON_FIXTURES,
+  TWO_PASS_FIXTURES
 } from './test-utils';
 
 // ============================================================================
@@ -655,6 +656,147 @@ describe('FileAnalyzer - Edge Cases', () => {
 
       const issues = await analyzeContent('large.sql', content);
       expect(findIssueById(issues, 'year2')).toBeDefined();
+    });
+  });
+});
+
+// ============================================================================
+// 2-PASS ANALYSIS TESTS (FK Validation & ENUM Length)
+// ============================================================================
+
+describe('FileAnalyzer - 2-Pass FK Validation', () => {
+  describe('FK referencing PRIMARY KEY', () => {
+    it('should NOT report issue when FK references PRIMARY KEY', async () => {
+      const issues = await analyzeMultipleFiles([
+        { name: 'users.sql', content: TWO_PASS_FIXTURES.fkWithPrimaryKey.parent },
+        { name: 'orders.sql', content: TWO_PASS_FIXTURES.fkWithPrimaryKey.child }
+      ]);
+
+      // Should not have fk_non_unique_ref error
+      const fkIssue = findIssueById(issues, 'fk_non_unique_ref');
+      expect(fkIssue).toBeUndefined();
+    });
+  });
+
+  describe('FK referencing UNIQUE index', () => {
+    it('should NOT report issue when FK references UNIQUE indexed column', async () => {
+      const issues = await analyzeMultipleFiles([
+        { name: 'categories.sql', content: TWO_PASS_FIXTURES.fkWithUniqueIndex.parent },
+        { name: 'products.sql', content: TWO_PASS_FIXTURES.fkWithUniqueIndex.child }
+      ]);
+
+      // Should not have fk_non_unique_ref error
+      const fkIssue = findIssueById(issues, 'fk_non_unique_ref');
+      expect(fkIssue).toBeUndefined();
+    });
+  });
+
+  describe('FK referencing non-indexed column', () => {
+    it('should report ERROR when FK references column without UNIQUE/PRIMARY index', async () => {
+      const issues = await analyzeMultipleFiles([
+        { name: 'departments.sql', content: TWO_PASS_FIXTURES.fkWithoutIndex.parent },
+        { name: 'employees.sql', content: TWO_PASS_FIXTURES.fkWithoutIndex.child }
+      ]);
+
+      // Should have fk_non_unique_ref error
+      const fkIssue = findIssueById(issues, 'fk_non_unique_ref');
+      expect(fkIssue).toBeDefined();
+      expect(fkIssue?.severity).toBe('error');
+      expect(fkIssue?.fixQuery).toContain('ADD UNIQUE INDEX');
+    });
+  });
+
+  describe('FK with referenced table not in dump', () => {
+    it('should report INFO when referenced table is not found', async () => {
+      const childOnly = `
+CREATE TABLE orphan_child (
+  id INT PRIMARY KEY,
+  parent_id INT,
+  FOREIGN KEY (parent_id) REFERENCES missing_parent(id)
+);`;
+
+      const issues = await analyzeContent('orphan.sql', childOnly);
+
+      // Should have fk_ref_table_not_found info
+      const fkIssue = findIssueById(issues, 'fk_ref_table_not_found');
+      expect(fkIssue).toBeDefined();
+      expect(fkIssue?.severity).toBe('info');
+    });
+  });
+});
+
+describe('FileAnalyzer - ENUM Length Validation', () => {
+  describe('ENUM with element exceeding 255 chars', () => {
+    it('should report ERROR for ENUM element over 255 characters', async () => {
+      const issues = await analyzeContent('status.sql', TWO_PASS_FIXTURES.enumTooLong);
+
+      const enumIssue = findIssueById(issues, 'enum_element_length_exceeded');
+      expect(enumIssue).toBeDefined();
+      expect(enumIssue?.severity).toBe('error');
+      expect(enumIssue?.description).toContain('260');  // Contains the actual length
+    });
+  });
+
+  describe('ENUM with normal elements', () => {
+    it('should NOT report issue for normal ENUM elements', async () => {
+      const issues = await analyzeContent('types.sql', TWO_PASS_FIXTURES.enumNormal);
+
+      const enumIssue = findIssueById(issues, 'enum_element_length_exceeded');
+      expect(enumIssue).toBeUndefined();
+    });
+  });
+});
+
+// ============================================================================
+// UTF-8 + 4-BYTE CHARACTER CROSS-VALIDATION TESTS
+// ============================================================================
+
+describe('FileAnalyzer - UTF-8 Cross-Validation', () => {
+  describe('utf8 charset with 4-byte characters', () => {
+    it('should report warning when utf8 table has 4-byte characters', async () => {
+      const issues = await analyzeMultipleFiles([
+        { name: 'messages_utf8.sql', content: TWO_PASS_FIXTURES.utf8With4ByteChars.schema + TWO_PASS_FIXTURES.utf8With4ByteChars.data }
+      ]);
+
+      const fourByteIssue = findIssueById(issues, 'data_4byte_chars');
+      expect(fourByteIssue).toBeDefined();
+      expect(fourByteIssue?.severity).toBe('warning');
+      expect(fourByteIssue?.description).toContain('utf8');
+    });
+  });
+
+  describe('utf8mb4 charset with 4-byte characters', () => {
+    it('should NOT report warning when utf8mb4 table has 4-byte characters', async () => {
+      const issues = await analyzeMultipleFiles([
+        { name: 'messages_utf8mb4.sql', content: TWO_PASS_FIXTURES.utf8mb4With4ByteChars.schema + TWO_PASS_FIXTURES.utf8mb4With4ByteChars.data }
+      ]);
+
+      const fourByteIssue = findIssueById(issues, 'data_4byte_chars');
+      expect(fourByteIssue).toBeUndefined();
+    });
+  });
+
+  describe('utf8mb3 charset with 4-byte characters', () => {
+    it('should report warning when utf8mb3 table has 4-byte characters', async () => {
+      const issues = await analyzeMultipleFiles([
+        { name: 'messages_utf8mb3.sql', content: TWO_PASS_FIXTURES.utf8mb3With4ByteChars.schema + TWO_PASS_FIXTURES.utf8mb3With4ByteChars.data }
+      ]);
+
+      const fourByteIssue = findIssueById(issues, 'data_4byte_chars');
+      expect(fourByteIssue).toBeDefined();
+      expect(fourByteIssue?.severity).toBe('warning');
+    });
+  });
+
+  describe('Schema and data in separate files', () => {
+    it('should cross-validate charset across multiple files', async () => {
+      const issues = await analyzeMultipleFiles([
+        { name: 'schema.sql', content: TWO_PASS_FIXTURES.utf8With4ByteChars.schema },
+        { name: 'data.sql', content: TWO_PASS_FIXTURES.utf8With4ByteChars.data }
+      ]);
+
+      const fourByteIssue = findIssueById(issues, 'data_4byte_chars');
+      expect(fourByteIssue).toBeDefined();
     });
   });
 });
