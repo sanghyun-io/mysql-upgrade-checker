@@ -8,10 +8,14 @@ import type {
   Issue,
   TableSchemas,
   ConfigSection,
-  AnalysisProgress
+  AnalysisProgress,
+  TableInfo,
+  UserInfo
 } from './types';
 import { compatibilityRules } from './rules';
-import { REMOVED_SYS_VARS_84 } from './constants';
+import { REMOVED_SYS_VARS_84, SYS_VARS_NEW_DEFAULTS_84 } from './constants';
+import { parseCreateTable } from './parsers/table-parser';
+import { parseCreateUser, parseGrant, extractUsers } from './parsers/user-parser';
 
 // Callback types for real-time updates
 export type OnIssueCallback = (issue: Issue) => void;
@@ -304,10 +308,16 @@ export class FileAnalyzer {
     // Schema and query rules (pattern-based)
     this.analyzeWithPatternRules(content, fileName);
 
-    // GRANT statement analysis
+    // Advanced table schema analysis
+    this.analyzeTableSchema(content, fileName);
+
+    // Advanced user statement analysis
+    this.analyzeUserStatements(content, fileName);
+
+    // GRANT statement analysis (legacy)
     this.analyzeGrantStatements(content, fileName);
 
-    // CREATE USER statement analysis
+    // CREATE USER statement analysis (legacy)
     this.analyzeCreateUserStatements(content, fileName);
 
     // INSERT statement data analysis
@@ -598,6 +608,221 @@ export class FileAnalyzer {
   }
 
   // ==========================================================================
+  // ADVANCED SCHEMA ANALYSIS
+  // ==========================================================================
+
+  /**
+   * Analyze table schema using structured parsing
+   */
+  private analyzeTableSchema(sql: string, fileName: string): void {
+    // Extract CREATE TABLE statements
+    const createTablePattern = /CREATE TABLE[\s\S]+?;/gi;
+    const matches = sql.matchAll(createTablePattern);
+
+    for (const match of matches) {
+      const table = parseCreateTable(match[0]);
+      if (table) {
+        // Check table engine compatibility
+        this.checkTableEngine(table, fileName);
+
+        // Check column types
+        this.checkColumns(table, fileName);
+
+        // Check partitions
+        if (table.partitions && table.partitions.length > 0) {
+          this.checkPartitions(table, fileName);
+        }
+      }
+    }
+  }
+
+  /**
+   * Analyze user statements using structured parsing
+   */
+  private analyzeUserStatements(content: string, fileName: string): void {
+    const users = extractUsers(content);
+
+    for (const user of users) {
+      // Check authentication plugin
+      if (user.authPlugin) {
+        if (user.authPlugin === 'mysql_native_password') {
+          const rule = compatibilityRules.find(r => r.id === 'mysql_native_password');
+          if (rule) {
+            this.addIssue({
+              ...rule,
+              location: fileName,
+              userName: `${user.user}@${user.host}`,
+              code: `IDENTIFIED WITH ${user.authPlugin}`,
+              fixQuery: rule.generateFixQuery?.({ userName: user.user }) || null
+            });
+          }
+        } else if (user.authPlugin === 'sha256_password') {
+          const rule = compatibilityRules.find(r => r.id === 'sha256_password');
+          if (rule) {
+            this.addIssue({
+              ...rule,
+              location: fileName,
+              userName: `${user.user}@${user.host}`,
+              code: `IDENTIFIED WITH ${user.authPlugin}`
+            });
+          }
+        }
+      }
+
+      // Check privileges
+      for (const privilege of user.privileges) {
+        if (privilege === 'SUPER') {
+          const rule = compatibilityRules.find(r => r.id === 'super_privilege');
+          if (rule) {
+            this.addIssue({
+              ...rule,
+              location: fileName,
+              userName: `${user.user}@${user.host}`,
+              privilege: 'SUPER',
+              fixQuery: rule.generateFixQuery?.({ userName: user.user }) || null
+            });
+          }
+        }
+      }
+    }
+  }
+
+  /**
+   * Check table engine compatibility
+   */
+  private checkTableEngine(table: TableInfo, fileName: string): void {
+    if (!table.engine) {
+      return;
+    }
+
+    const engine = table.engine.toUpperCase();
+
+    // Check for removed or deprecated engines
+    const deprecatedEngines = ['ISAM', 'BERKELEYDB', 'BDB'];
+    if (deprecatedEngines.includes(engine)) {
+      this.addIssue({
+        id: 'deprecated_engine',
+        type: 'schema',
+        category: 'invalidObjects',
+        severity: 'error',
+        title: '제거된 스토리지 엔진 사용',
+        description: `테이블 ${table.name}이(가) 제거된 스토리지 엔진 ${engine}을(를) 사용합니다.`,
+        suggestion: 'InnoDB 엔진으로 변경하세요.',
+        location: fileName,
+        tableName: table.name,
+        code: `ENGINE=${engine}`,
+        fixQuery: `ALTER TABLE \`${table.name}\` ENGINE=InnoDB;`
+      });
+    }
+
+    // Check charset compatibility
+    if (table.charset) {
+      const charset = table.charset.toLowerCase();
+      if (charset === 'utf8' || charset === 'utf8mb3') {
+        const rule = compatibilityRules.find(r => r.id === 'utf8_charset');
+        if (rule) {
+          this.addIssue({
+            ...rule,
+            location: fileName,
+            tableName: table.name,
+            code: `CHARSET=${table.charset}`,
+            fixQuery: `ALTER TABLE \`${table.name}\` CONVERT TO CHARACTER SET utf8mb4;`
+          });
+        }
+      }
+    }
+  }
+
+  /**
+   * Check column types and properties
+   */
+  private checkColumns(table: TableInfo, fileName: string): void {
+    for (const column of table.columns) {
+      const columnType = column.type.toUpperCase();
+
+      // Check for deprecated data types
+      if (columnType.startsWith('YEAR(2)')) {
+        this.addIssue({
+          id: 'year_2_digit',
+          type: 'schema',
+          category: 'invalidObjects',
+          severity: 'error',
+          title: '2자리 YEAR 타입 사용',
+          description: `컬럼 ${table.name}.${column.name}이(가) 2자리 YEAR 타입을 사용합니다.`,
+          suggestion: 'YEAR(4) 또는 SMALLINT로 변경하세요.',
+          location: fileName,
+          tableName: table.name,
+          columnName: column.name,
+          columnType: column.type,
+          code: `${column.name} ${column.type}`,
+          fixQuery: `ALTER TABLE \`${table.name}\` MODIFY COLUMN \`${column.name}\` YEAR(4);`
+        });
+      }
+
+      // Check for zero dates in DEFAULT
+      if (column.default === '0000-00-00' || column.default === '0000-00-00 00:00:00') {
+        const rule = compatibilityRules.find(r => r.id === 'invalid_date_zero');
+        if (rule) {
+          this.addIssue({
+            ...rule,
+            location: fileName,
+            tableName: table.name,
+            columnName: column.name,
+            code: `${column.name} DEFAULT '${column.default}'`,
+            fixQuery: `ALTER TABLE \`${table.name}\` MODIFY COLUMN \`${column.name}\` ${column.type} DEFAULT NULL;`
+          });
+        }
+      }
+
+      // Check column charset
+      if (column.charset) {
+        const charset = column.charset.toLowerCase();
+        if (charset === 'utf8' || charset === 'utf8mb3') {
+          const rule = compatibilityRules.find(r => r.id === 'utf8_charset');
+          if (rule) {
+            this.addIssue({
+              ...rule,
+              location: fileName,
+              tableName: table.name,
+              columnName: column.name,
+              code: `${column.name} CHARACTER SET ${column.charset}`,
+              fixQuery: `ALTER TABLE \`${table.name}\` MODIFY COLUMN \`${column.name}\` ${column.type} CHARACTER SET utf8mb4;`
+            });
+          }
+        }
+      }
+    }
+  }
+
+  /**
+   * Check partition compatibility
+   */
+  private checkPartitions(table: TableInfo, fileName: string): void {
+    if (!table.partitions) {
+      return;
+    }
+
+    for (const partition of table.partitions) {
+      // Check for deprecated partition features
+      if (partition.type === 'LINEAR HASH' || partition.type === 'LINEAR KEY') {
+        this.addIssue({
+          id: 'linear_partition',
+          type: 'schema',
+          category: 'invalidObjects',
+          severity: 'warning',
+          title: 'LINEAR 파티션 사용',
+          description: `테이블 ${table.name}이(가) LINEAR 파티션을 사용합니다.`,
+          suggestion: '파티션 방식 검토를 권장합니다.',
+          location: fileName,
+          tableName: table.name,
+          code: `PARTITION BY ${partition.type}`,
+          docLink: 'https://dev.mysql.com/doc/refman/8.4/en/partitioning.html'
+        });
+      }
+    }
+  }
+
+  // ==========================================================================
   // HELPER METHODS
   // ==========================================================================
   private extractTableSchemas(content: string): TableSchemas {
@@ -668,5 +893,128 @@ export class FileAnalyzer {
     const end = Math.min(content.length, position + length / 2);
     let context = content.substring(start, end);
     return context.trim();
+  }
+
+  // ==========================================================================
+  // SERVER QUERY RESULT ANALYSIS
+  // ==========================================================================
+
+  /**
+   * Analyze server query result based on check ID
+   */
+  analyzeServerQueryResult(checkId: string, result: { columns: string[]; rows: Record<string, string | number | null>[] }): Issue[] {
+    switch (checkId) {
+      case 'checkSysVarDefaults':
+        return this.analyzeSysVarDefaults(result);
+      case 'authMethodUsage':
+      case 'deprecatedDefaultAuth':
+      case 'pluginUsage':
+        return this.analyzeUserAuthPlugins(result);
+      default:
+        return [];
+    }
+  }
+
+  /**
+   * Analyze user authentication plugins from server query result
+   */
+  analyzeUserAuthPlugins(result: { columns: string[]; rows: Record<string, string | number | null>[] }): Issue[] {
+    const issues: Issue[] = [];
+
+    for (const row of result.rows) {
+      const userName = row.User || row.user_name || row.user;
+      const host = row.Host || row.host;
+      const plugin = row.plugin || row.auth_plugin;
+
+      if (!userName || !plugin) continue;
+
+      const userHost = `${userName}@${host}`;
+
+      // Check for mysql_native_password
+      if (plugin === 'mysql_native_password') {
+        const rule = compatibilityRules.find(r => r.id === 'mysql_native_password');
+        if (rule) {
+          issues.push({
+            ...rule,
+            location: `mysql.user: ${userHost}`,
+            code: `IDENTIFIED WITH ${plugin}`,
+            userName: String(userName),
+            fixQuery: rule.generateFixQuery?.({ userName: String(userName) }) || null
+          });
+        }
+      }
+
+      // Check for sha256_password
+      if (plugin === 'sha256_password') {
+        const rule = compatibilityRules.find(r => r.id === 'sha256_password');
+        if (rule) {
+          issues.push({
+            ...rule,
+            location: `mysql.user: ${userHost}`,
+            code: `IDENTIFIED WITH ${plugin}`,
+            userName: String(userName)
+          });
+        }
+      }
+
+      // Check for authentication_fido
+      if (plugin && String(plugin).includes('authentication_fido')) {
+        const rule = compatibilityRules.find(r => r.id === 'authentication_fido');
+        if (rule) {
+          issues.push({
+            ...rule,
+            location: `mysql.user: ${userHost}`,
+            code: `IDENTIFIED WITH ${plugin}`,
+            userName: String(userName)
+          });
+        }
+      }
+    }
+
+    return issues;
+  }
+
+  /**
+   * Analyze system variable default values from server query result
+   */
+  analyzeSysVarDefaults(result: { columns: string[]; rows: Record<string, string | number | null>[] }): Issue[] {
+    const issues: Issue[] = [];
+
+    for (const row of result.rows) {
+      const varName = String(row.VARIABLE_NAME || row.variable_name || '');
+      const varValue = row.VARIABLE_VALUE || row.variable_value;
+
+      if (!varName || varValue === null) continue;
+
+      // Check if this variable has a new default in 8.4
+      const varConfig = SYS_VARS_NEW_DEFAULTS_84[varName as keyof typeof SYS_VARS_NEW_DEFAULTS_84];
+      if (!varConfig) continue;
+
+      const [oldDefault, newDefault, description] = varConfig;
+      const currentValue = String(varValue);
+
+      // If current value matches old default, it will change after upgrade
+      const matchesOldDefault =
+        (oldDefault === null && currentValue === '') ||
+        String(oldDefault).toLowerCase() === currentValue.toLowerCase();
+
+      if (matchesOldDefault) {
+        issues.push({
+          id: 'sysvar_new_default',
+          type: 'config',
+          category: 'newDefaultVars',
+          severity: 'warning',
+          title: `${varName} 기본값 변경`,
+          description: `시스템 변수 '${varName}'의 현재 값이 8.0 기본값(${oldDefault})입니다. 8.4 업그레이드 후 기본값이 ${newDefault}로 변경됩니다.`,
+          suggestion: `업그레이드 후 동작 변경을 원하지 않는다면, 설정 파일에 명시적으로 '${varName} = ${oldDefault}'를 추가하세요.`,
+          location: 'performance_schema.global_variables',
+          variableName: varName,
+          code: `${varName} = ${currentValue} (8.0 default: ${oldDefault}, 8.4 default: ${newDefault})`,
+          mysqlShellCheckId: 'sysVarsNewDefaults'
+        });
+      }
+    }
+
+    return issues;
   }
 }

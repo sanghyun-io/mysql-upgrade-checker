@@ -2,7 +2,15 @@ import { FileAnalyzer } from './analyzer';
 import { UIManager, copyToClipboard } from './ui';
 import type { AnalysisResults, Issue, AnalysisProgress } from './types';
 import { CHECK_GUIDE, SERVER_REQUIRED_CHECKS, COMBINED_SERVER_CHECK_QUERY } from './constants';
+import { parseServerResult, type ServerQueryResult } from './parsers/server-result-parser';
 import { showSuccess, showError, showInfo } from './toast';
+import {
+  generateMySQLShellReport,
+  generateCSVReport,
+  generateJSONReport,
+  generateFixQueriesSQL,
+  downloadFile
+} from './report';
 
 let uploadedFiles: File[] = [];
 let analysisResults: AnalysisResults = {
@@ -131,16 +139,85 @@ function initializeServerChecks(): void {
   if (serverChecksInitialized) return;
   serverChecksInitialized = true;
 
+  // Populate server checks list
   const container = document.getElementById('serverChecksList');
-  if (!container) return;
+  if (container) {
+    container.innerHTML = SERVER_REQUIRED_CHECKS.map((check) => `
+      <div class="server-check-item">
+        <h4>${check.name}</h4>
+        <p>${check.description}</p>
+      </div>
+    `).join('');
+  }
 
-  container.innerHTML = SERVER_REQUIRED_CHECKS.map((check) => `
-    <div class="server-check-item">
-      <h4>${check.name}</h4>
-      <p>${check.description}</p>
-    </div>
-  `).join('');
+  // Populate server check dropdown
+  const select = document.getElementById('serverCheckSelect') as HTMLSelectElement;
+  if (select) {
+    // Add options for each check
+    SERVER_REQUIRED_CHECKS.forEach((check) => {
+      const option = document.createElement('option');
+      option.value = check.id;
+      option.textContent = check.name;
+      select.appendChild(option);
+    });
+
+    // Add change event listener
+    select.addEventListener('change', (e) => {
+      const checkId = (e.target as HTMLSelectElement).value;
+      if (checkId) {
+        displayServerCheck(checkId);
+      } else {
+        hideServerCheck();
+      }
+    });
+  }
 }
+
+function displayServerCheck(checkId: string): void {
+  const check = SERVER_REQUIRED_CHECKS.find(c => c.id === checkId);
+  if (!check) return;
+
+  // Show description
+  const descEl = document.getElementById('serverCheckDescription');
+  if (descEl) {
+    descEl.innerHTML = `
+      <p><strong>설명:</strong> ${check.description}</p>
+      <p><strong>필요 이유:</strong> ${check.reason}</p>
+      <p><strong>결과 분석:</strong> ${check.analyzeResult}</p>
+    `;
+    descEl.style.display = 'block';
+  }
+
+  // Show query
+  const queryDisplayEl = document.getElementById('serverQueryDisplay');
+  const queryCodeEl = document.getElementById('serverQueryCode');
+  if (queryDisplayEl && queryCodeEl) {
+    queryCodeEl.textContent = check.query;
+    queryDisplayEl.style.display = 'block';
+  }
+}
+
+function hideServerCheck(): void {
+  const descEl = document.getElementById('serverCheckDescription');
+  const queryDisplayEl = document.getElementById('serverQueryDisplay');
+
+  if (descEl) descEl.style.display = 'none';
+  if (queryDisplayEl) queryDisplayEl.style.display = 'none';
+}
+
+(window as any).copyServerQuery = () => {
+  const queryCodeEl = document.getElementById('serverQueryCode');
+  if (queryCodeEl && queryCodeEl.textContent) {
+    navigator.clipboard.writeText(queryCodeEl.textContent).then(() => {
+      showSuccess('쿼리가 클립보드에 복사되었습니다!');
+    }).catch(() => {
+      showError('클립보드 복사에 실패했습니다.', {
+        errorType: 'CLIPBOARD_ERROR',
+        errorMessage: '클립보드 복사 실패'
+      });
+    });
+  }
+};
 
 // ============================================================================
 // Server Query Functions
@@ -186,32 +263,32 @@ if (serverResultInput) {
   });
 }
 
-function analyzeServerResult(content: string, _fileName: string): void {
-  // Try to parse as JSON first
-  let data: any;
-  try {
-    data = JSON.parse(content);
-  } catch {
-    // If not JSON, try to parse as tab-separated or text
-    data = parseTextResult(content);
-  }
+function analyzeServerResult(content: string, fileName: string): void {
+  let result: ServerQueryResult;
 
-  if (!data || Object.keys(data).length === 0) {
-    showError('파일 형식을 인식할 수 없습니다. JSON 또는 텍스트 형식으로 저장해주세요.', {
+  try {
+    result = parseServerResult(content);
+  } catch (error) {
+    showError('파일 형식을 인식할 수 없습니다. JSON 또는 TSV 형식으로 저장해주세요.', {
       errorType: 'FILE_FORMAT_ERROR',
       errorMessage: '서버 결과 파일의 형식을 인식할 수 없습니다.',
-      additionalInfo: { fileName: _fileName }
+      additionalInfo: { fileName, error: String(error) }
     });
     return;
   }
 
-  // Analyze the server result data
-  const serverIssues = processServerData(data);
+  if (result.rows.length === 0) {
+    showInfo('서버 결과 파일이 비어있거나 데이터가 없습니다.');
+    return;
+  }
+
+  // Detect check type from result structure
+  const serverIssues = analyzeServerQueryData(result);
 
   if (serverIssues.length === 0) {
     showSuccess('서버 검사 결과: 문제가 발견되지 않았습니다!');
   } else {
-    // Merge with existing results or display separately
+    // Create results object
     const serverResults: AnalysisResults = {
       issues: serverIssues,
       stats: {
@@ -233,62 +310,53 @@ function analyzeServerResult(content: string, _fileName: string): void {
   }
 }
 
-function parseTextResult(content: string): any {
-  // Parse MySQL command-line output (tab-separated)
-  const lines = content.split('\n').filter((l) => l.trim());
-  const results: any[] = [];
+/**
+ * Analyze server query data and detect issues
+ */
+function analyzeServerQueryData(result: ServerQueryResult): Issue[] {
+  const issues: Issue[] = [];
 
-  for (const line of lines) {
-    if (line.startsWith('check_type\t')) {
-      continue; // Skip header
-    }
-    const parts = line.split('\t');
-    if (parts.length >= 2) {
-      results.push({
-        check_type: parts[0],
-        data: parts.slice(1)
-      });
-    }
+  // Detect check type from column names
+  const columns = result.columns.map(c => c.toLowerCase());
+
+  // Check for user authentication data (User, Host, plugin)
+  if (columns.includes('user') && columns.includes('plugin')) {
+    const authIssues = fileAnalyzer.analyzeUserAuthPlugins(result);
+    issues.push(...authIssues);
   }
 
-  return { rows: results };
-}
+  // Check for system variable data (VARIABLE_NAME, VARIABLE_VALUE)
+  if (columns.includes('variable_name') && columns.includes('variable_value')) {
+    const sysvarIssues = fileAnalyzer.analyzeSysVarDefaults(result);
+    issues.push(...sysvarIssues);
+  }
 
-function processServerData(data: any): any[] {
-  const issues: any[] = [];
+  // Handle combined query format with check_type column
+  if (columns.includes('check_type')) {
+    for (const row of result.rows) {
+      const checkType = String(row.check_type || row.CHECK_TYPE);
 
-  // Process user authentication data
-  if (data.user_auth || (data.rows && data.rows.some((r: any) => r.check_type === 'user_auth'))) {
-    const authData = data.user_auth || data.rows?.filter((r: any) => r.check_type === 'user_auth') || [];
-    for (const user of authData) {
-      const plugin = user.auth_plugin || user.plugin || user.data?.[2];
-      const userName = user.user_name || user.User || user.data?.[0];
-      const host = user.host || user.Host || user.data?.[1];
-
-      if (plugin === 'mysql_native_password') {
-        issues.push({
-          id: 'server_auth_native',
-          type: 'privilege',
-          category: 'authentication',
-          severity: 'error',
-          title: 'mysql_native_password 사용자 발견',
-          description: `사용자 '${userName}'@'${host}'가 mysql_native_password 플러그인을 사용하고 있습니다. MySQL 8.4에서 기본 비활성화됩니다.`,
-          suggestion: 'caching_sha2_password로 마이그레이션하세요: ALTER USER ... IDENTIFIED WITH caching_sha2_password BY ...',
-          location: `mysql.user: ${userName}@${host}`,
-          mysqlShellCheckId: 'authMethodUsage'
-        });
-      } else if (plugin === 'sha256_password') {
-        issues.push({
-          id: 'server_auth_sha256',
-          type: 'privilege',
-          category: 'authentication',
-          severity: 'warning',
-          title: 'sha256_password 사용자 발견 (폐기 예정)',
-          description: `사용자 '${userName}'@'${host}'가 sha256_password 플러그인을 사용하고 있습니다.`,
-          suggestion: 'caching_sha2_password로 마이그레이션을 권장합니다.',
-          location: `mysql.user: ${userName}@${host}`,
-          mysqlShellCheckId: 'deprecatedDefaultAuth'
-        });
+      if (checkType === 'user_auth') {
+        // Extract user auth data
+        const userResult: ServerQueryResult = {
+          columns: ['User', 'Host', 'plugin'],
+          rows: [{
+            User: row.user_name || row.User,
+            Host: row.host || row.Host,
+            plugin: row.auth_plugin || row.plugin
+          }]
+        };
+        issues.push(...fileAnalyzer.analyzeUserAuthPlugins(userResult));
+      } else if (checkType === 'sys_vars') {
+        // Extract system variable data
+        const sysvarResult: ServerQueryResult = {
+          columns: ['VARIABLE_NAME', 'VARIABLE_VALUE'],
+          rows: [{
+            VARIABLE_NAME: row.var_name || row.VARIABLE_NAME,
+            VARIABLE_VALUE: row.var_value || row.VARIABLE_VALUE
+          }]
+        };
+        issues.push(...fileAnalyzer.analyzeSysVarDefaults(sysvarResult));
       }
     }
   }
@@ -534,6 +602,76 @@ function setupRealtimeAnalysis(): void {
     }
   );
 }
+
+// ============================================================================
+// Export Functions
+// ============================================================================
+
+/**
+ * Export results as JSON
+ */
+(window as any).exportJSON = function (): void {
+  if (analysisResults.issues.length === 0) {
+    showInfo('내보낼 결과가 없습니다.');
+    return;
+  }
+
+  const json = generateJSONReport(analysisResults);
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+  downloadFile(json, `mysql-upgrade-check-${timestamp}.json`, 'application/json');
+  showSuccess('JSON 리포트를 다운로드했습니다.');
+};
+
+/**
+ * Export results as CSV
+ */
+(window as any).exportCSV = function (): void {
+  if (analysisResults.issues.length === 0) {
+    showInfo('내보낼 결과가 없습니다.');
+    return;
+  }
+
+  const csv = generateCSVReport(analysisResults.issues);
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+  downloadFile(csv, `mysql-upgrade-check-${timestamp}.csv`, 'text/csv');
+  showSuccess('CSV 리포트를 다운로드했습니다.');
+};
+
+/**
+ * Export results in MySQL Shell format
+ */
+(window as any).exportMySQLShell = function (): void {
+  if (analysisResults.issues.length === 0) {
+    showInfo('내보낼 결과가 없습니다.');
+    return;
+  }
+
+  const report = generateMySQLShellReport(analysisResults.issues, analysisResults.metadata);
+  const json = JSON.stringify(report, null, 2);
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+  downloadFile(json, `mysql-shell-upgrade-check-${timestamp}.json`, 'application/json');
+  showSuccess('MySQL Shell 형식 리포트를 다운로드했습니다.');
+};
+
+/**
+ * Export all fix queries as SQL
+ */
+(window as any).exportAllFixQueries = function (): void {
+  const fixableIssues = analysisResults.issues.filter((i) => i.fixQuery);
+
+  if (fixableIssues.length === 0) {
+    showInfo('자동 수정 쿼리가 없습니다.');
+    return;
+  }
+
+  const sql = generateFixQueriesSQL(analysisResults.issues);
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+  downloadFile(sql, `mysql-upgrade-fixes-${timestamp}.sql`, 'text/plain');
+  showSuccess(`${fixableIssues.length}개의 수정 쿼리를 다운로드했습니다.`);
+};
+
+// Keep old exportReport for backwards compatibility
+(window as any).exportReport = (window as any).exportJSON;
 
 // ============================================================================
 // Initialize on DOMContentLoaded

@@ -85,46 +85,6 @@ export const NEW_RESERVED_KEYWORDS_84 = [
   'TABLESAMPLE'
 ] as const;
 
-// All reserved keywords that could conflict with identifiers
-export const ALL_RESERVED_KEYWORDS = [
-  ...NEW_RESERVED_KEYWORDS_84,
-  'ACCESSIBLE', 'ADD', 'ALL', 'ALTER', 'ANALYZE', 'AND', 'AS', 'ASC',
-  'ASENSITIVE', 'BEFORE', 'BETWEEN', 'BIGINT', 'BINARY', 'BLOB', 'BOTH',
-  'BY', 'CALL', 'CASCADE', 'CASE', 'CHANGE', 'CHAR', 'CHARACTER', 'CHECK',
-  'COLLATE', 'COLUMN', 'CONDITION', 'CONSTRAINT', 'CONTINUE', 'CONVERT',
-  'CREATE', 'CROSS', 'CUBE', 'CUME_DIST', 'CURRENT_DATE', 'CURRENT_TIME',
-  'CURRENT_TIMESTAMP', 'CURRENT_USER', 'CURSOR', 'DATABASE', 'DATABASES',
-  'DAY_HOUR', 'DAY_MICROSECOND', 'DAY_MINUTE', 'DAY_SECOND', 'DEC', 'DECIMAL',
-  'DECLARE', 'DEFAULT', 'DELAYED', 'DELETE', 'DENSE_RANK', 'DESC', 'DESCRIBE',
-  'DETERMINISTIC', 'DISTINCT', 'DISTINCTROW', 'DIV', 'DOUBLE', 'DROP', 'DUAL',
-  'EACH', 'ELSE', 'ELSEIF', 'EMPTY', 'ENCLOSED', 'ESCAPED', 'EXCEPT', 'EXISTS',
-  'EXIT', 'EXPLAIN', 'FALSE', 'FETCH', 'FIRST_VALUE', 'FLOAT', 'FLOAT4', 'FLOAT8',
-  'FOR', 'FORCE', 'FOREIGN', 'FROM', 'FULLTEXT', 'FUNCTION', 'GENERATED', 'GET',
-  'GRANT', 'GROUP', 'GROUPING', 'GROUPS', 'HAVING', 'HIGH_PRIORITY', 'HOUR_MICROSECOND',
-  'HOUR_MINUTE', 'HOUR_SECOND', 'IF', 'IGNORE', 'IN', 'INDEX', 'INFILE', 'INNER',
-  'INOUT', 'INSENSITIVE', 'INSERT', 'INT', 'INT1', 'INT2', 'INT3', 'INT4', 'INT8',
-  'INTEGER', 'INTERVAL', 'INTO', 'IO_AFTER_GTIDS', 'IO_BEFORE_GTIDS', 'IS', 'ITERATE',
-  'JOIN', 'JSON_TABLE', 'KEY', 'KEYS', 'KILL', 'LAG', 'LAST_VALUE', 'LATERAL', 'LEAD',
-  'LEADING', 'LEAVE', 'LEFT', 'LIKE', 'LIMIT', 'LINEAR', 'LINES', 'LOAD', 'LOCALTIME',
-  'LOCALTIMESTAMP', 'LOCK', 'LONG', 'LONGBLOB', 'LONGTEXT', 'LOOP', 'LOW_PRIORITY',
-  'MASTER_BIND', 'MASTER_SSL_VERIFY_SERVER_CERT', 'MATCH', 'MAXVALUE', 'MEDIUMBLOB',
-  'MEDIUMINT', 'MEDIUMTEXT', 'MIDDLEINT', 'MINUTE_MICROSECOND', 'MINUTE_SECOND', 'MOD',
-  'MODIFIES', 'NATURAL', 'NOT', 'NO_WRITE_TO_BINLOG', 'NTH_VALUE', 'NTILE', 'NULL',
-  'NUMERIC', 'OF', 'ON', 'OPTIMIZE', 'OPTIMIZER_COSTS', 'OPTION', 'OPTIONALLY', 'OR',
-  'ORDER', 'OUT', 'OUTER', 'OUTFILE', 'OVER', 'PARTITION', 'PERCENT_RANK', 'PRECISION',
-  'PRIMARY', 'PROCEDURE', 'PURGE', 'RANGE', 'RANK', 'READ', 'READS', 'READ_WRITE',
-  'REAL', 'RECURSIVE', 'REFERENCES', 'REGEXP', 'RELEASE', 'RENAME', 'REPEAT', 'REPLACE',
-  'REQUIRE', 'RESIGNAL', 'RESTRICT', 'RETURN', 'REVOKE', 'RIGHT', 'RLIKE', 'ROW',
-  'ROWS', 'ROW_NUMBER', 'SCHEMA', 'SCHEMAS', 'SECOND_MICROSECOND', 'SELECT', 'SENSITIVE',
-  'SEPARATOR', 'SET', 'SHOW', 'SIGNAL', 'SMALLINT', 'SPATIAL', 'SPECIFIC', 'SQL',
-  'SQLEXCEPTION', 'SQLSTATE', 'SQLWARNING', 'SQL_BIG_RESULT', 'SQL_CALC_FOUND_ROWS',
-  'SQL_SMALL_RESULT', 'SSL', 'STARTING', 'STORED', 'STRAIGHT_JOIN', 'SYSTEM', 'TABLE',
-  'TERMINATED', 'THEN', 'TINYBLOB', 'TINYINT', 'TINYTEXT', 'TO', 'TRAILING', 'TRIGGER',
-  'TRUE', 'UNDO', 'UNION', 'UNIQUE', 'UNLOCK', 'UNSIGNED', 'UPDATE', 'USAGE', 'USE',
-  'USING', 'UTC_DATE', 'UTC_TIME', 'UTC_TIMESTAMP', 'VALUES', 'VARBINARY', 'VARCHAR',
-  'VARCHARACTER', 'VARYING', 'VIRTUAL', 'WHEN', 'WHERE', 'WHILE', 'WINDOW', 'WITH',
-  'WRITE', 'XOR', 'YEAR_MONTH', 'ZEROFILL'
-] as const;
 
 // ============================================================================
 // 4. AUTHENTICATION PLUGINS
@@ -428,6 +388,14 @@ export interface ServerRequiredCheck {
 }
 
 export const SERVER_REQUIRED_CHECKS: ServerRequiredCheck[] = [
+  {
+    id: 'checkSysVarDefaults',
+    name: '시스템 변수 기본값 검사',
+    description: 'MySQL 8.4에서 기본값이 변경된 시스템 변수의 현재 값 확인',
+    reason: 'performance_schema.global_variables 실시간 쿼리가 필요합니다.',
+    query: SYSVAR_CHECK_QUERY,
+    analyzeResult: '8.0 기본값과 다른 값이 설정되어 있는지 확인하여, 8.4 업그레이드 후 동작 변경 여부를 판단합니다.'
+  },
   {
     id: 'circularDirectory',
     name: '순환 디렉토리 참조',
@@ -1066,3 +1034,25 @@ SELECT
 FROM INFORMATION_SCHEMA.TRIGGERS
 WHERE TRIGGER_SCHEMA NOT IN ('mysql', 'information_schema', 'performance_schema', 'sys');
 `;
+
+// ============================================================================
+// 22. SYSTEM VARIABLE CHECK QUERY (for new defaults detection)
+// ============================================================================
+export const SYSVAR_CHECK_QUERY = `-- 시스템 변수 기본값 검사
+-- 8.4에서 기본값이 변경된 변수들의 현재 값을 확인합니다.
+SELECT
+  VARIABLE_NAME,
+  VARIABLE_VALUE
+FROM performance_schema.global_variables
+WHERE VARIABLE_NAME IN (
+  'replica_parallel_workers',
+  'innodb_adaptive_hash_index',
+  'innodb_doublewrite_pages',
+  'innodb_flush_method',
+  'innodb_io_capacity',
+  'innodb_io_capacity_max',
+  'innodb_log_buffer_size',
+  'innodb_redo_log_capacity',
+  'innodb_change_buffering',
+  'binlog_transaction_dependency_tracking'
+);`;
