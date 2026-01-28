@@ -300,18 +300,3 @@ export interface AnalysisProgress {
   phase: 'reading' | 'analyzing' | 'complete' | 'skipped';
 }
 
-// File analysis result summary
-export interface FileAnalysisResult {
-  fileName: string;
-  fileType: string;
-  issuesFound: number;
-  skipped: boolean;
-}
-
-// Event types for FileAnalyzer
-export interface AnalyzerEventMap {
-  'issue': CustomEvent<Issue>;
-  'progress': CustomEvent<AnalysisProgress>;
-  'fileComplete': CustomEvent<FileAnalysisResult>;
-  'analysisComplete': CustomEvent<AnalysisResults>;
-}

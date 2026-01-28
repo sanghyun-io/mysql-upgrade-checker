@@ -148,10 +148,6 @@ export function showSuccess(message: string): string {
   return toastManager.show({ message, severity: 'success' });
 }
 
-export function showWarning(message: string): string {
-  return toastManager.show({ message, severity: 'warning' });
-}
-
 export function showError(message: string, errorContext?: ErrorContext): string {
   return toastManager.show({
     message,
