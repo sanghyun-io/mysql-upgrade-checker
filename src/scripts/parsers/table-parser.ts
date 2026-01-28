@@ -341,16 +341,34 @@ function parseForeignKeys(tableBody: string): ForeignKeyInfo[] {
  */
 function parsePartitions(tableOptions: string): PartitionInfo[] | undefined {
   // Match PARTITION BY clause - handle both COLUMNS() and regular expression
-  const partitionMatch = tableOptions.match(/PARTITION\s+BY\s+(RANGE|LIST|HASH|KEY)(?:\s+COLUMNS)?\s*\(([^)]+(?:\([^)]*\))?)\)([\s\S]+)/i);
+  const partitionMatch = tableOptions.match(/PARTITION\s+BY\s+(RANGE|LIST|HASH|KEY)(?:\s+COLUMNS)?\s*\(([^)]+(?:\([^)]*\))?)\)([\s\S]*)/i);
   if (!partitionMatch) {
     return undefined;
   }
 
   const partitionType = partitionMatch[1].toUpperCase();
   const expression = partitionMatch[2].trim();
-  const partitionDefs = partitionMatch[3];
+  const partitionDefs = partitionMatch[3] || '';
 
   const partitions: PartitionInfo[] = [];
+
+  // For HASH and KEY partitioning, check for "PARTITIONS N" syntax
+  if (partitionType === 'HASH' || partitionType === 'KEY') {
+    const partitionsCountMatch = partitionDefs.match(/PARTITIONS\s+(\d+)/i);
+    if (partitionsCountMatch) {
+      const count = parseInt(partitionsCountMatch[1], 10);
+      // Create synthetic partition entries for HASH/KEY partitioning
+      for (let i = 0; i < count; i++) {
+        partitions.push({
+          name: `p${i}`,
+          type: partitionType,
+          expression,
+          description: `HASH partition ${i}`
+        });
+      }
+      return partitions;
+    }
+  }
 
   // Match individual partition definitions
   // Handle both "VALUES LESS THAN" (RANGE) and "VALUES IN" (LIST)

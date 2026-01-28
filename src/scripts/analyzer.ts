@@ -863,8 +863,28 @@ export class FileAnalyzer {
    * Check partition compatibility
    */
   private checkPartitions(table: TableInfo, fileName: string): void {
-    if (!table.partitions) {
+    if (!table.partitions || table.partitions.length === 0) {
       return;
+    }
+
+    // Check if table engine is non-native partitioning engine
+    const NON_NATIVE_ENGINES = ['MYISAM', 'MERGE', 'CSV'];
+    if (table.engine && NON_NATIVE_ENGINES.includes(table.engine.toUpperCase())) {
+      this.addIssue({
+        id: 'non_native_partition_parsed',
+        type: 'schema',
+        category: 'invalidObjects',
+        severity: 'warning',
+        title: '비네이티브 파티셔닝 엔진',
+        description: `테이블 '${table.name}'이(가) ${table.engine} 엔진으로 파티셔닝되어 있습니다. ${NON_NATIVE_ENGINES.join(', ')} 엔진의 파티셔닝은 deprecated되었습니다.`,
+        suggestion: 'InnoDB 엔진으로 변경한 후 파티셔닝을 사용하세요.',
+        location: fileName,
+        tableName: table.name,
+        code: `ENGINE=${table.engine}, PARTITION BY ${table.partitions[0]?.type || 'UNKNOWN'}`,
+        mysqlShellCheckId: 'nonNativePartitioning',
+        docLink: 'https://dev.mysql.com/doc/refman/8.4/en/partitioning-limitations.html',
+        fixQuery: `ALTER TABLE \`${table.name}\` ENGINE=InnoDB;`
+      });
     }
 
     for (const partition of table.partitions) {
@@ -977,7 +997,7 @@ export class FileAnalyzer {
    * Pass 1: Collect table index information from SQL content
    * Extracts PRIMARY KEY and UNIQUE indexes for FK reference validation
    */
-  private collectTableIndexes(content: string, fileName: string): void {
+  private collectTableIndexes(content: string, _fileName: string): void {
     const createTablePattern = /CREATE TABLE[\s\S]+?;/gi;
     const matches = content.matchAll(createTablePattern);
 
@@ -1018,7 +1038,7 @@ export class FileAnalyzer {
    * Pass 1: Collect table charset information from SQL content
    * Used for 4-byte UTF-8 cross-validation
    */
-  private collectTableCharsets(content: string, fileName: string): void {
+  private collectTableCharsets(content: string, _fileName: string): void {
     const createTablePattern = /CREATE TABLE[\s\S]+?;/gi;
     const matches = content.matchAll(createTablePattern);
 
@@ -1118,7 +1138,6 @@ export class FileAnalyzer {
     indexColumns: string[],
     prefixLengths?: number[]
   ): { totalBytes: number; columnDetails: Array<{ column: string; bytes: number }> } {
-    const MAX_INDEX_KEY_SIZE = 3072;
     const tableKey = tableName.toLowerCase();
     const charsetInfo = this.tableCharsetMap.get(tableKey);
     const columnDetails: Array<{ column: string; bytes: number }> = [];
@@ -1249,7 +1268,7 @@ export class FileAnalyzer {
   private generatePrefixIndexFix(
     tableName: string,
     indexName: string,
-    columns: string[],
+    _columns: string[],
     columnDetails: Array<{ column: string; bytes: number }>
   ): string {
     // Calculate suggested prefix lengths to fit within 3072 bytes

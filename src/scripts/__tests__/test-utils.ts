@@ -509,7 +509,41 @@ CREATE TABLE composite_large (
   col1 VARCHAR(400),
   col2 VARCHAR(400),
   INDEX idx_composite (col1, col2)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;`
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;`,
+
+  // Non-native partitioning with MyISAM engine - should produce warning
+  nonNativePartitionMyISAM: `
+CREATE TABLE partitioned_myisam (
+  id INT,
+  name VARCHAR(100),
+  created_date DATE
+) ENGINE=MyISAM
+PARTITION BY RANGE (YEAR(created_date)) (
+  PARTITION p2020 VALUES LESS THAN (2021),
+  PARTITION p2021 VALUES LESS THAN (2022),
+  PARTITION p2022 VALUES LESS THAN MAXVALUE
+);`,
+
+  // Native partitioning with InnoDB - should NOT produce warning
+  nativePartitionInnoDB: `
+CREATE TABLE partitioned_innodb (
+  id INT,
+  name VARCHAR(100),
+  created_date DATE
+) ENGINE=InnoDB
+PARTITION BY RANGE (YEAR(created_date)) (
+  PARTITION p2020 VALUES LESS THAN (2021),
+  PARTITION p2021 VALUES LESS THAN (2022),
+  PARTITION p2022 VALUES LESS THAN MAXVALUE
+);`,
+
+  // Non-native partitioning with CSV engine
+  nonNativePartitionCSV: `
+CREATE TABLE partitioned_csv (
+  id INT NOT NULL,
+  name VARCHAR(100) NOT NULL
+) ENGINE=CSV
+PARTITION BY HASH(id) PARTITIONS 4;`
 };
 
 // ============================================================================

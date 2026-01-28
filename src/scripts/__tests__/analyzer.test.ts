@@ -858,3 +858,39 @@ describe('FileAnalyzer - Index Size Calculation', () => {
     });
   });
 });
+
+// ============================================================================
+// NON-NATIVE PARTITIONING TESTS
+// ============================================================================
+
+describe('FileAnalyzer - Non-native Partitioning', () => {
+  describe('MyISAM partitioning', () => {
+    it('should report warning for MyISAM partitioned table', async () => {
+      const issues = await analyzeContent('myisam_part.sql', TWO_PASS_FIXTURES.nonNativePartitionMyISAM);
+
+      const partIssue = findIssueById(issues, 'non_native_partition_parsed');
+      expect(partIssue).toBeDefined();
+      expect(partIssue?.severity).toBe('warning');
+      expect(partIssue?.description).toContain('MyISAM');
+    });
+  });
+
+  describe('InnoDB partitioning', () => {
+    it('should NOT report warning for InnoDB partitioned table', async () => {
+      const issues = await analyzeContent('innodb_part.sql', TWO_PASS_FIXTURES.nativePartitionInnoDB);
+
+      const partIssue = findIssueById(issues, 'non_native_partition_parsed');
+      expect(partIssue).toBeUndefined();
+    });
+  });
+
+  describe('CSV partitioning', () => {
+    it('should report warning for CSV partitioned table', async () => {
+      const issues = await analyzeContent('csv_part.sql', TWO_PASS_FIXTURES.nonNativePartitionCSV);
+
+      const partIssue = findIssueById(issues, 'non_native_partition_parsed');
+      expect(partIssue).toBeDefined();
+      expect(partIssue?.description).toContain('CSV');
+    });
+  });
+});
