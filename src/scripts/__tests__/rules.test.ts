@@ -26,26 +26,6 @@ function testPatternMatch(ruleId: string, text: string): boolean {
   return rule.pattern.test(text);
 }
 
-/**
- * Get all matches for a rule's pattern in the given text
- */
-function _getPatternMatches(ruleId: string, text: string): string[] {
-  const rule = compatibilityRules.find(r => r.id === ruleId);
-  if (!rule?.pattern) return [];
-  rule.pattern.lastIndex = 0;
-  const matches = text.matchAll(rule.pattern);
-  return Array.from(matches).map(m => m[0]);
-}
-
-/**
- * Test detectInData callback for data rules
- */
-function _testDetectInData(ruleId: string, value: string, columnType?: string): boolean {
-  const rule = compatibilityRules.find(r => r.id === ruleId);
-  if (!rule?.detectInData) return false;
-  return rule.detectInData(value, columnType);
-}
-
 // ============================================================================
 // 1. REMOVED SYSTEM VARIABLES TESTS
 // ============================================================================
