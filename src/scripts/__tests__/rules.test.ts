@@ -5,7 +5,19 @@
 
 import { describe, it, expect } from 'vitest';
 import { compatibilityRules, rulesByCategory } from '../rules';
-import { REMOVED_SYS_VARS_84, NEW_RESERVED_KEYWORDS_84, REMOVED_FUNCTIONS_84 } from '../constants';
+import {
+  REMOVED_SYS_VARS_84,
+  SYS_VARS_NEW_DEFAULTS_84,
+  NEW_RESERVED_KEYWORDS_84,
+  REMOVED_FUNCTIONS_84,
+  DEPRECATED_FUNCTIONS_84,
+  REMOVED_PRIVILEGES_84,
+  SUPER_REPLACEMENT_PRIVILEGES,
+  DEPRECATED_ENGINES,
+  INVALID_57_NAME_PATTERNS,
+  SHARED_TABLESPACES,
+  NON_NATIVE_PARTITION_ENGINES
+} from '../constants';
 
 // ============================================================================
 // HELPER FUNCTIONS
@@ -140,15 +152,41 @@ describe('New Default Values Rules', () => {
 
   describe('replica_parallel_workers rule', () => {
     it('should detect replica_parallel_workers=0', () => {
-      expect(testPatternMatch('sys_var_new_default_replica_parallel', 'replica_parallel_workers=0')).toBe(true);
-    });
-
-    it('should detect slave_parallel_workers=0 (old name)', () => {
-      expect(testPatternMatch('sys_var_new_default_replica_parallel', 'slave_parallel_workers=0')).toBe(true);
+      expect(testPatternMatch('sys_var_new_default_replica_parallel_workers', 'replica_parallel_workers=0')).toBe(true);
     });
 
     it('should NOT match non-zero values', () => {
-      expect(testPatternMatch('sys_var_new_default_replica_parallel', 'replica_parallel_workers=4')).toBe(false);
+      expect(testPatternMatch('sys_var_new_default_replica_parallel_workers', 'replica_parallel_workers=4')).toBe(false);
+    });
+  });
+
+  describe('SYS_VARS_NEW_DEFAULTS_84 dynamic rules', () => {
+    it('should generate rules for all variables in SYS_VARS_NEW_DEFAULTS_84', () => {
+      const varNames = Object.keys(SYS_VARS_NEW_DEFAULTS_84);
+      for (const varName of varNames) {
+        const ruleId = `sys_var_new_default_${varName}`;
+        const rule = compatibilityRules.find(r => r.id === ruleId);
+        expect(rule).toBeDefined();
+        expect(rule?.category).toBe('newDefaultVars');
+        expect(rule?.severity).toBe('warning');
+      }
+    });
+
+    it('should detect innodb_adaptive_hash_index=ON', () => {
+      expect(testPatternMatch('sys_var_new_default_innodb_adaptive_hash_index', 'innodb_adaptive_hash_index=ON')).toBe(true);
+    });
+
+    it('should detect innodb_flush_method=fsync', () => {
+      expect(testPatternMatch('sys_var_new_default_innodb_flush_method', 'innodb_flush_method=fsync')).toBe(true);
+    });
+
+    it('should detect innodb_io_capacity=200', () => {
+      expect(testPatternMatch('sys_var_new_default_innodb_io_capacity', 'innodb_io_capacity=200')).toBe(true);
+    });
+
+    it('should NOT match new default values', () => {
+      expect(testPatternMatch('sys_var_new_default_innodb_adaptive_hash_index', 'innodb_adaptive_hash_index=OFF')).toBe(false);
+      expect(testPatternMatch('sys_var_new_default_innodb_flush_method', 'innodb_flush_method=O_DIRECT')).toBe(false);
     });
   });
 
@@ -301,6 +339,70 @@ describe('Authentication Rules', () => {
       expect(rule?.severity).toBe('error');
     });
   });
+
+  describe('NEW RULE 1: auth_plugin_disabled detection', () => {
+    it('should detect IDENTIFIED BY mysql_native_password', () => {
+      expect(testPatternMatch('auth_plugin_disabled', "IDENTIFIED BY 'mysql_native_password'")).toBe(true);
+      expect(testPatternMatch('auth_plugin_disabled', 'IDENTIFIED BY mysql_native_password')).toBe(true);
+    });
+
+    it('should detect IDENTIFIED WITH mysql_native_password', () => {
+      expect(testPatternMatch('auth_plugin_disabled', "IDENTIFIED WITH 'mysql_native_password'")).toBe(true);
+      expect(testPatternMatch('auth_plugin_disabled', 'IDENTIFIED WITH mysql_native_password')).toBe(true);
+    });
+
+    it('should have warning severity', () => {
+      const rule = compatibilityRules.find(r => r.id === 'auth_plugin_disabled');
+      expect(rule?.severity).toBe('warning');
+    });
+
+    it('should have correct category', () => {
+      const rule = compatibilityRules.find(r => r.id === 'auth_plugin_disabled');
+      expect(rule?.category).toBe('authentication');
+    });
+
+    it('should generate fix query', () => {
+      const rule = compatibilityRules.find(r => r.id === 'auth_plugin_disabled');
+      const fix = rule?.generateFixQuery?.({ userName: 'test_user' });
+      expect(fix).toContain('ALTER USER');
+      expect(fix).toContain('test_user');
+      expect(fix).toContain('caching_sha2_password');
+    });
+  });
+
+  describe('NEW RULE 2: auth_plugin_removed detection', () => {
+    it('should detect IDENTIFIED WITH authentication_fido', () => {
+      expect(testPatternMatch('auth_plugin_removed', "IDENTIFIED WITH 'authentication_fido'")).toBe(true);
+      expect(testPatternMatch('auth_plugin_removed', 'IDENTIFIED WITH authentication_fido')).toBe(true);
+    });
+
+    it('should detect IDENTIFIED WITH authentication_fido_client', () => {
+      expect(testPatternMatch('auth_plugin_removed', "IDENTIFIED WITH 'authentication_fido_client'")).toBe(true);
+      expect(testPatternMatch('auth_plugin_removed', 'IDENTIFIED WITH authentication_fido_client')).toBe(true);
+    });
+
+    it('should detect IDENTIFIED BY authentication_fido', () => {
+      expect(testPatternMatch('auth_plugin_removed', "IDENTIFIED BY 'authentication_fido'")).toBe(true);
+    });
+
+    it('should have error severity', () => {
+      const rule = compatibilityRules.find(r => r.id === 'auth_plugin_removed');
+      expect(rule?.severity).toBe('error');
+    });
+
+    it('should have correct category', () => {
+      const rule = compatibilityRules.find(r => r.id === 'auth_plugin_removed');
+      expect(rule?.category).toBe('authentication');
+    });
+
+    it('should generate fix query', () => {
+      const rule = compatibilityRules.find(r => r.id === 'auth_plugin_removed');
+      const fix = rule?.generateFixQuery?.({ userName: 'fido_user' });
+      expect(fix).toContain('ALTER USER');
+      expect(fix).toContain('fido_user');
+      expect(fix).toContain('caching_sha2_password');
+    });
+  });
 });
 
 // ============================================================================
@@ -331,6 +433,68 @@ describe('Invalid Privileges Rules', () => {
       const fix = rule?.generateFixQuery?.({ userName: 'admin' });
       expect(fix).toContain('REVOKE SUPER');
       expect(fix).toContain('admin');
+    });
+  });
+
+  describe('NEW RULE 4: removed_privilege_84 detection', () => {
+    it('should detect GRANT SUPER privilege', () => {
+      expect(testPatternMatch('removed_privilege_84', "GRANT SUPER ON *.* TO 'user'@'%'")).toBe(true);
+    });
+
+    it('should detect SUPER in mixed privileges', () => {
+      expect(testPatternMatch('removed_privilege_84', "GRANT SELECT, SUPER, INSERT ON db.* TO 'user'@'%'")).toBe(true);
+    });
+
+    it('should have error severity', () => {
+      const rule = compatibilityRules.find(r => r.id === 'removed_privilege_84');
+      expect(rule?.severity).toBe('error');
+    });
+
+    it('should have correct category', () => {
+      const rule = compatibilityRules.find(r => r.id === 'removed_privilege_84');
+      expect(rule?.category).toBe('invalidPrivileges');
+    });
+
+    it('should generate fix query', () => {
+      const rule = compatibilityRules.find(r => r.id === 'removed_privilege_84');
+      const fix = rule?.generateFixQuery?.({ userName: 'admin' });
+      expect(fix).toContain('REVOKE SUPER');
+      expect(fix).toContain('admin');
+      expect(fix).toContain('SYSTEM_VARIABLES_ADMIN');
+    });
+  });
+
+  describe('NEW RULE 5: super_privilege_replacement detection', () => {
+    it('should detect GRANT SUPER for replacement suggestion', () => {
+      expect(testPatternMatch('super_privilege_replacement', "GRANT SUPER ON *.* TO 'user'@'%'")).toBe(true);
+    });
+
+    it('should detect SUPER in mixed privileges', () => {
+      expect(testPatternMatch('super_privilege_replacement', "GRANT ALL PRIVILEGES, SUPER ON *.* TO 'root'@'localhost'")).toBe(true);
+    });
+
+    it('should have warning severity', () => {
+      const rule = compatibilityRules.find(r => r.id === 'super_privilege_replacement');
+      expect(rule?.severity).toBe('warning');
+    });
+
+    it('should have correct category', () => {
+      const rule = compatibilityRules.find(r => r.id === 'super_privilege_replacement');
+      expect(rule?.category).toBe('invalidPrivileges');
+    });
+
+    it('should reference SUPER_REPLACEMENT_PRIVILEGES in description', () => {
+      const rule = compatibilityRules.find(r => r.id === 'super_privilege_replacement');
+      expect(rule?.description).toContain('SYSTEM_VARIABLES_ADMIN');
+    });
+
+    it('should generate fix query with dynamic privileges', () => {
+      const rule = compatibilityRules.find(r => r.id === 'super_privilege_replacement');
+      const fix = rule?.generateFixQuery?.({ userName: 'admin' });
+      expect(fix).toContain('REVOKE SUPER');
+      expect(fix).toContain('admin');
+      expect(fix).toContain('SYSTEM_VARIABLES_ADMIN');
+      expect(fix).toContain('CONNECTION_ADMIN');
     });
   });
 });
@@ -418,6 +582,54 @@ describe('Invalid Objects Rules', () => {
     });
   });
 
+  describe('NEW RULE 6: deprecated_engine detection', () => {
+    it('should detect ENGINE=ARCHIVE', () => {
+      expect(testPatternMatch('deprecated_engine', 'ENGINE=ARCHIVE')).toBe(true);
+      expect(testPatternMatch('deprecated_engine', 'ENGINE = ARCHIVE')).toBe(true);
+    });
+
+    it('should detect ENGINE=BLACKHOLE', () => {
+      expect(testPatternMatch('deprecated_engine', 'ENGINE=BLACKHOLE')).toBe(true);
+    });
+
+    it('should detect ENGINE=MERGE', () => {
+      expect(testPatternMatch('deprecated_engine', 'ENGINE=MERGE')).toBe(true);
+    });
+
+    it('should detect ENGINE=FEDERATED', () => {
+      expect(testPatternMatch('deprecated_engine', 'ENGINE=FEDERATED')).toBe(true);
+    });
+
+    it('should detect ENGINE=NDB', () => {
+      expect(testPatternMatch('deprecated_engine', 'ENGINE=NDB')).toBe(true);
+    });
+
+    it('should NOT detect ENGINE=MyISAM (has separate rule)', () => {
+      expect(testPatternMatch('deprecated_engine', 'ENGINE=MyISAM')).toBe(false);
+    });
+
+    it('should NOT match ENGINE=InnoDB', () => {
+      expect(testPatternMatch('deprecated_engine', 'ENGINE=InnoDB')).toBe(false);
+    });
+
+    it('should have warning severity', () => {
+      const rule = compatibilityRules.find(r => r.id === 'deprecated_engine');
+      expect(rule?.severity).toBe('warning');
+    });
+
+    it('should have correct category', () => {
+      const rule = compatibilityRules.find(r => r.id === 'deprecated_engine');
+      expect(rule?.category).toBe('invalidObjects');
+    });
+
+    it('should generate fix query', () => {
+      const rule = compatibilityRules.find(r => r.id === 'deprecated_engine');
+      const fix = rule?.generateFixQuery?.({ code: 'CREATE TABLE archive_test (id INT) ENGINE=ARCHIVE' });
+      expect(fix).toContain('ALTER TABLE');
+      expect(fix).toContain('ENGINE=InnoDB');
+    });
+  });
+
   describe('latin1 charset detection', () => {
     it('should detect CHARSET=latin1', () => {
       expect(testPatternMatch('latin1', 'CHARSET=latin1')).toBe(true);
@@ -453,6 +665,33 @@ describe('Invalid Objects Rules', () => {
   describe('SQL_CALC_FOUND_ROWS detection', () => {
     it('should detect SQL_CALC_FOUND_ROWS', () => {
       expect(testPatternMatch('sql_calc_found_rows', 'SELECT SQL_CALC_FOUND_ROWS * FROM users')).toBe(true);
+    });
+  });
+
+  describe('NEW RULE 3: deprecated_function_84 detection', () => {
+    it('should detect FOUND_ROWS() function', () => {
+      expect(testPatternMatch('deprecated_function_84', 'SELECT FOUND_ROWS()')).toBe(true);
+    });
+
+    it('should detect SQL_CALC_FOUND_ROWS in query', () => {
+      expect(testPatternMatch('deprecated_function_84', 'SELECT SQL_CALC_FOUND_ROWS() FROM users')).toBe(true);
+    });
+
+    it('should have warning severity', () => {
+      const rule = compatibilityRules.find(r => r.id === 'deprecated_function_84');
+      expect(rule?.severity).toBe('warning');
+    });
+
+    it('should have correct category', () => {
+      const rule = compatibilityRules.find(r => r.id === 'deprecated_function_84');
+      expect(rule?.category).toBe('invalidObjects');
+    });
+
+    it('should generate fix query with alternative approach', () => {
+      const rule = compatibilityRules.find(r => r.id === 'deprecated_function_84');
+      const fix = rule?.generateFixQuery?.({});
+      expect(fix).toContain('SQL_CALC_FOUND_ROWS');
+      expect(fix).toContain('COUNT(*)');
     });
   });
 
@@ -551,6 +790,115 @@ describe('Invalid Objects Rules', () => {
 
     it('should detect COALESCE function in generated column', () => {
       expect(testPatternMatch('generated_column_function', 'GENERATED ALWAYS AS (COALESCE(a, b, 0))')).toBe(true);
+    });
+  });
+
+  describe('Invalid 5.7 identifier patterns', () => {
+    describe('Dollar sign start detection', () => {
+      it('should detect $ prefix in table name', () => {
+        expect(testPatternMatch('invalid_57_name_dollar_start', 'CREATE TABLE $test (')).toBe(true);
+      });
+
+      it('should detect $ prefix in database name', () => {
+        expect(testPatternMatch('invalid_57_name_dollar_start', 'CREATE DATABASE $mydb')).toBe(true);
+      });
+
+      it('should detect $ prefix in view name', () => {
+        expect(testPatternMatch('invalid_57_name_dollar_start', 'CREATE VIEW $my_view AS')).toBe(true);
+      });
+
+      it('should NOT match valid identifiers', () => {
+        expect(testPatternMatch('invalid_57_name_dollar_start', 'CREATE TABLE test_table (')).toBe(false);
+      });
+    });
+
+    describe('Multiple dots detection', () => {
+      it('should detect consecutive dots in identifier', () => {
+        expect(testPatternMatch('invalid_57_name_multiple_dots', 'CREATE TABLE db..table (')).toBe(true);
+      });
+
+      it('should NOT match single dot (valid schema.table)', () => {
+        expect(testPatternMatch('invalid_57_name_multiple_dots', 'CREATE TABLE db.table (')).toBe(false);
+      });
+    });
+
+    describe('Trailing space detection', () => {
+      it('should detect trailing space in table name with backticks', () => {
+        expect(testPatternMatch('invalid_57_name_trailing_space', 'CREATE TABLE `test `')).toBe(true);
+      });
+
+      it('should detect trailing space in database name', () => {
+        expect(testPatternMatch('invalid_57_name_trailing_space', 'CREATE DATABASE `mydb `')).toBe(true);
+      });
+
+      it('should NOT match names without trailing spaces', () => {
+        expect(testPatternMatch('invalid_57_name_trailing_space', 'CREATE TABLE `test`')).toBe(false);
+      });
+    });
+  });
+
+  describe('Shared tablespace partition detection', () => {
+    it('should detect partition table in mysql tablespace', () => {
+      expect(testPatternMatch('partitioned_tables_in_shared_tablespaces',
+        'CREATE TABLE t1 (id INT) TABLESPACE=mysql PARTITION BY RANGE (id)')).toBe(true);
+    });
+
+    it('should detect partition table in innodb_system tablespace', () => {
+      expect(testPatternMatch('partitioned_tables_in_shared_tablespaces',
+        'CREATE TABLE t2 (id INT) TABLESPACE="innodb_system" PARTITION BY HASH (id)')).toBe(true);
+    });
+
+    it('should detect partition table in innodb_temporary tablespace', () => {
+      expect(testPatternMatch('partitioned_tables_in_shared_tablespaces',
+        'CREATE TABLE t3 (id INT) TABLESPACE innodb_temporary PARTITION BY LIST (id)')).toBe(true);
+    });
+
+    it('should NOT match file-per-table partitions', () => {
+      expect(testPatternMatch('partitioned_tables_in_shared_tablespaces',
+        'CREATE TABLE t4 (id INT) TABLESPACE=innodb_file_per_table PARTITION BY RANGE (id)')).toBe(false);
+    });
+
+    it('should have correct severity and category', () => {
+      const rule = compatibilityRules.find(r => r.id === 'partitioned_tables_in_shared_tablespaces');
+      expect(rule?.severity).toBe('error');
+      expect(rule?.category).toBe('invalidObjects');
+    });
+  });
+
+  describe('Non-native partition engine detection', () => {
+    it('should detect MyISAM partition', () => {
+      expect(testPatternMatch('non_native_partition_engine',
+        'PARTITION BY RANGE (year) ENGINE=MyISAM')).toBe(true);
+    });
+
+    it('should detect CSV partition', () => {
+      expect(testPatternMatch('non_native_partition_engine',
+        'PARTITION BY HASH (id) ENGINE=CSV')).toBe(true);
+    });
+
+    it('should detect MERGE partition', () => {
+      expect(testPatternMatch('non_native_partition_engine',
+        'PARTITION BY LIST (status) ENGINE=MERGE')).toBe(true);
+    });
+
+    it('should NOT match InnoDB partition', () => {
+      expect(testPatternMatch('non_native_partition_engine',
+        'PARTITION BY RANGE (id) ENGINE=InnoDB')).toBe(false);
+    });
+
+    it('should have correct severity and category', () => {
+      const rule = compatibilityRules.find(r => r.id === 'non_native_partition_engine');
+      expect(rule?.severity).toBe('warning');
+      expect(rule?.category).toBe('invalidObjects');
+    });
+
+    it('should generate fix query', () => {
+      const rule = compatibilityRules.find(r => r.id === 'non_native_partition_engine');
+      const fix = rule?.generateFixQuery?.({
+        code: 'CREATE TABLE part_test (id INT) PARTITION BY RANGE (id) ENGINE=MyISAM'
+      });
+      expect(fix).toContain('ALTER TABLE');
+      expect(fix).toContain('ENGINE=InnoDB');
     });
   });
 });
