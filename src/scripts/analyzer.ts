@@ -636,6 +636,43 @@ export class FileAnalyzer {
           });
         }
       }
+
+      // Latin1 charset with non-ASCII data check
+      this.checkLatin1NonAsciiData(tableName, valuesStr, fileName);
+    }
+  }
+
+  /**
+   * Check for Latin1 charset tables with non-ASCII data
+   * Non-ASCII characters (0x80-0xFF) in Latin1 may cause issues when converting to UTF-8
+   */
+  private checkLatin1NonAsciiData(tableName: string, valuesStr: string, fileName: string): void {
+    const charsetInfo = this.tableCharsetMap.get(tableName.toLowerCase());
+    if (!charsetInfo) return;
+
+    const charset = charsetInfo.tableCharset?.toLowerCase();
+    if (charset !== 'latin1') return;
+
+    // Check for non-ASCII characters (extended Latin1 range: 0x80-0xFF)
+    // These characters are represented differently in UTF-8 and may cause conversion issues
+    const hasNonAscii = /[\x80-\xFF]/.test(valuesStr);
+    // Also check for escaped high bytes like '\xA0' or similar patterns in the SQL
+    const hasEscapedHighBytes = /\\x[89A-Fa-f][0-9A-Fa-f]|\\[2-3][0-7][0-7]/.test(valuesStr);
+
+    if (hasNonAscii || hasEscapedHighBytes) {
+      this.addIssue({
+        id: 'latin1_non_ascii_data',
+        type: 'data',
+        category: 'dataIntegrity',
+        severity: 'warning',
+        title: 'Latin1 테이블의 비ASCII 데이터',
+        description: `테이블 '${tableName}'이(가) Latin1 문자셋을 사용하며 비ASCII 데이터가 포함되어 있습니다. UTF-8로 변환 시 문자 인코딩 문제가 발생할 수 있습니다.`,
+        suggestion: '데이터를 UTF-8로 변환하기 전에 Latin1 특수 문자가 올바르게 처리되는지 확인하세요. 특히 서유럽 문자(é, ñ, ü 등)가 포함된 경우 주의가 필요합니다.',
+        location: `${fileName} - Table: ${tableName}`,
+        tableName: tableName,
+        code: valuesStr.substring(0, 150) + '...',
+        mysqlShellCheckId: 'dataIntegrity'
+      });
     }
   }
 

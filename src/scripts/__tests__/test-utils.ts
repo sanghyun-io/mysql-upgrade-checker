@@ -651,7 +651,40 @@ CREATE TABLE categories (
 CREATE VIEW product_categories AS
 SELECT p.name AS product, c.name AS category
 FROM products p
-JOIN categories c ON p.id = c.id;`
+JOIN categories c ON p.id = c.id;`,
+
+  // Latin1 table with non-ASCII data - should produce warning
+  latin1WithNonAscii: {
+    schema: `
+CREATE TABLE legacy_customers (
+  id INT PRIMARY KEY,
+  name VARCHAR(100)
+) ENGINE=InnoDB DEFAULT CHARSET=latin1;`,
+    data: `
+INSERT INTO legacy_customers (id, name) VALUES (1, 'José García');`
+  },
+
+  // Latin1 table with ASCII-only data - should NOT produce warning
+  latin1WithAsciiOnly: {
+    schema: `
+CREATE TABLE ascii_only (
+  id INT PRIMARY KEY,
+  name VARCHAR(100)
+) ENGINE=InnoDB DEFAULT CHARSET=latin1;`,
+    data: `
+INSERT INTO ascii_only (id, name) VALUES (1, 'John Smith');`
+  },
+
+  // UTF8MB4 table with non-ASCII data - should NOT produce warning
+  utf8mb4WithNonAscii: {
+    schema: `
+CREATE TABLE modern_customers (
+  id INT PRIMARY KEY,
+  name VARCHAR(100)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;`,
+    data: `
+INSERT INTO modern_customers (id, name) VALUES (1, 'José García');`
+  }
 };
 
 // ============================================================================

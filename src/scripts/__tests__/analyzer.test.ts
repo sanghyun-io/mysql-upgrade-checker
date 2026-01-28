@@ -1042,3 +1042,41 @@ describe('FileAnalyzer - Orphaned Objects Detection', () => {
     });
   });
 });
+
+// ============================================================================
+// LATIN1 + NON-ASCII DATA CROSS-VALIDATION TESTS
+// ============================================================================
+
+describe('FileAnalyzer - Latin1 Non-ASCII Data Detection', () => {
+  describe('Latin1 table with non-ASCII data', () => {
+    it('should report warning for non-ASCII data in Latin1 table', async () => {
+      const content = TWO_PASS_FIXTURES.latin1WithNonAscii.schema + TWO_PASS_FIXTURES.latin1WithNonAscii.data;
+      const issues = await analyzeContent('legacy.sql', content);
+
+      const latin1Issue = findIssueById(issues, 'latin1_non_ascii_data');
+      expect(latin1Issue).toBeDefined();
+      expect(latin1Issue?.severity).toBe('warning');
+      expect(latin1Issue?.description).toContain('Latin1');
+    });
+  });
+
+  describe('Latin1 table with ASCII-only data', () => {
+    it('should NOT report warning for ASCII-only data in Latin1 table', async () => {
+      const content = TWO_PASS_FIXTURES.latin1WithAsciiOnly.schema + TWO_PASS_FIXTURES.latin1WithAsciiOnly.data;
+      const issues = await analyzeContent('ascii_only.sql', content);
+
+      const latin1Issue = findIssueById(issues, 'latin1_non_ascii_data');
+      expect(latin1Issue).toBeUndefined();
+    });
+  });
+
+  describe('UTF8MB4 table with non-ASCII data', () => {
+    it('should NOT report warning for non-ASCII data in UTF8MB4 table', async () => {
+      const content = TWO_PASS_FIXTURES.utf8mb4WithNonAscii.schema + TWO_PASS_FIXTURES.utf8mb4WithNonAscii.data;
+      const issues = await analyzeContent('modern.sql', content);
+
+      const latin1Issue = findIssueById(issues, 'latin1_non_ascii_data');
+      expect(latin1Issue).toBeUndefined();
+    });
+  });
+});
