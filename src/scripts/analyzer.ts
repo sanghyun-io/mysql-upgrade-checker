@@ -18,7 +18,7 @@ import type {
   ColumnCharsetInfo
 } from './types';
 import { compatibilityRules } from './rules';
-import { REMOVED_SYS_VARS_84, SYS_VARS_NEW_DEFAULTS_84, CHANGED_FUNCTIONS_IN_GENERATED_COLUMNS } from './constants';
+import { REMOVED_SYS_VARS_84, SYS_VARS_NEW_DEFAULTS_84, CHANGED_FUNCTIONS_IN_GENERATED_COLUMNS, NEW_RESERVED_KEYWORDS_84 } from './constants';
 import { parseCreateTable } from './parsers/table-parser';
 import { extractUsers } from './parsers/user-parser';
 
@@ -697,6 +697,57 @@ export class FileAnalyzer {
 
         // Check index sizes with accurate charset-based calculation
         this.checkIndexSizes(table, fileName);
+
+        // Check reserved keyword conflicts
+        this.checkReservedKeywords(table, fileName);
+      }
+    }
+  }
+
+  /**
+   * Check for reserved keyword conflicts in table and column names
+   */
+  private checkReservedKeywords(table: TableInfo, fileName: string): void {
+    const reservedKeywords = NEW_RESERVED_KEYWORDS_84.map(k => k.toUpperCase());
+
+    // Check table name
+    const tableNameUpper = table.name.toUpperCase();
+    if (reservedKeywords.includes(tableNameUpper)) {
+      this.addIssue({
+        id: 'reserved_keyword_table_parsed',
+        type: 'schema',
+        category: 'reservedKeywords',
+        severity: 'error',
+        title: '예약어 테이블 이름 충돌',
+        description: `테이블 이름 '${table.name}'이(가) MySQL 8.4의 신규 예약어와 충돌합니다.`,
+        suggestion: `테이블 이름을 변경하거나 백틱(\`)으로 감싸서 사용하세요: \`${table.name}\``,
+        location: fileName,
+        tableName: table.name,
+        code: `CREATE TABLE ${table.name}`,
+        fixQuery: `ALTER TABLE \`${table.name}\` RENAME TO \`${table.name}_renamed\`;`,
+        mysqlShellCheckId: 'reservedKeywords'
+      });
+    }
+
+    // Check column names
+    for (const column of table.columns) {
+      const columnNameUpper = column.name.toUpperCase();
+      if (reservedKeywords.includes(columnNameUpper)) {
+        this.addIssue({
+          id: 'reserved_keyword_column_parsed',
+          type: 'schema',
+          category: 'reservedKeywords',
+          severity: 'error',
+          title: '예약어 컬럼 이름 충돌',
+          description: `테이블 '${table.name}'의 컬럼 '${column.name}'이(가) MySQL 8.4의 신규 예약어와 충돌합니다.`,
+          suggestion: `컬럼 이름을 변경하거나 백틱(\`)으로 감싸서 사용하세요: \`${column.name}\``,
+          location: fileName,
+          tableName: table.name,
+          columnName: column.name,
+          code: `${column.name} ${column.type}`,
+          fixQuery: `ALTER TABLE \`${table.name}\` CHANGE COLUMN \`${column.name}\` \`${column.name}_renamed\` ${column.type};`,
+          mysqlShellCheckId: 'reservedKeywords'
+        });
       }
     }
   }

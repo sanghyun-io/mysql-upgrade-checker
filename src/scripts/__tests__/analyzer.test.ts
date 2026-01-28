@@ -944,3 +944,49 @@ describe('FileAnalyzer - Generated Column Function Detection', () => {
     });
   });
 });
+
+// ============================================================================
+// RESERVED KEYWORD CONFLICT TESTS
+// ============================================================================
+
+describe('FileAnalyzer - Reserved Keyword Detection', () => {
+  describe('Reserved keyword as table name', () => {
+    it('should report error for reserved keyword table name', async () => {
+      const issues = await analyzeContent('manual.sql', TWO_PASS_FIXTURES.reservedKeywordTable);
+
+      const keywordIssue = findIssueById(issues, 'reserved_keyword_table_parsed');
+      expect(keywordIssue).toBeDefined();
+      expect(keywordIssue?.severity).toBe('error');
+      expect(keywordIssue?.category).toBe('reservedKeywords');
+      expect(keywordIssue?.description).toContain('manual');
+    });
+  });
+
+  describe('Reserved keyword as column name', () => {
+    it('should report error for reserved keyword column names', async () => {
+      const issues = await analyzeContent('users.sql', TWO_PASS_FIXTURES.reservedKeywordColumn);
+
+      // Should find issues for 'parallel' and 'qualify' columns
+      const parallelIssue = issues.find(i =>
+        i.id === 'reserved_keyword_column_parsed' && i.columnName === 'parallel'
+      );
+      const qualifyIssue = issues.find(i =>
+        i.id === 'reserved_keyword_column_parsed' && i.columnName === 'qualify'
+      );
+
+      expect(parallelIssue).toBeDefined();
+      expect(parallelIssue?.severity).toBe('error');
+      expect(qualifyIssue).toBeDefined();
+      expect(qualifyIssue?.description).toContain('qualify');
+    });
+  });
+
+  describe('Normal table name (not reserved)', () => {
+    it('should NOT report error for normal table names', async () => {
+      const issues = await analyzeContent('normal.sql', TWO_PASS_FIXTURES.normalTableName);
+
+      const keywordIssue = findIssueById(issues, 'reserved_keyword_table_parsed');
+      expect(keywordIssue).toBeUndefined();
+    });
+  });
+});

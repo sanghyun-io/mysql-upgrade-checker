@@ -581,6 +581,28 @@ CREATE TABLE simple_calc (
   b INT,
   sum_val INT GENERATED ALWAYS AS (a + b) STORED,
   concat_val VARCHAR(100) GENERATED ALWAYS AS (CONCAT('val_', CAST(a AS CHAR))) VIRTUAL
+);`,
+
+  // Reserved keyword as table name - should produce error
+  reservedKeywordTable: `
+CREATE TABLE manual (
+  id INT PRIMARY KEY,
+  name VARCHAR(100)
+);`,
+
+  // Reserved keyword as column name - should produce error
+  reservedKeywordColumn: `
+CREATE TABLE users (
+  id INT PRIMARY KEY,
+  parallel INT,
+  qualify VARCHAR(100)
+);`,
+
+  // Normal table name (not reserved) - should NOT produce error
+  normalTableName: `
+CREATE TABLE normal_table (
+  id INT PRIMARY KEY,
+  data VARCHAR(100)
 );`
 };
 
