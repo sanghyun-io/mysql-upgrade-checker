@@ -990,3 +990,29 @@ describe('FileAnalyzer - Reserved Keyword Detection', () => {
     });
   });
 });
+
+// ============================================================================
+// FK NAME LENGTH TESTS
+// ============================================================================
+
+describe('FileAnalyzer - FK Name Length Validation', () => {
+  describe('FK name exceeding 64 characters', () => {
+    it('should report error for FK name over 64 characters', async () => {
+      const issues = await analyzeContent('child.sql', TWO_PASS_FIXTURES.fkNameTooLong);
+
+      const fkIssue = findIssueById(issues, 'fk_name_too_long_parsed');
+      expect(fkIssue).toBeDefined();
+      expect(fkIssue?.severity).toBe('error');
+      expect(fkIssue?.description).toContain('64');
+    });
+  });
+
+  describe('FK name within 64 characters', () => {
+    it('should NOT report error for FK name under 64 characters', async () => {
+      const issues = await analyzeContent('normal_fk.sql', TWO_PASS_FIXTURES.fkNameNormal);
+
+      const fkIssue = findIssueById(issues, 'fk_name_too_long_parsed');
+      expect(fkIssue).toBeUndefined();
+    });
+  });
+});

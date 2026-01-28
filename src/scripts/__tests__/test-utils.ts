@@ -603,6 +603,28 @@ CREATE TABLE users (
 CREATE TABLE normal_table (
   id INT PRIMARY KEY,
   data VARCHAR(100)
+);`,
+
+  // FK name exceeding 64 characters - should produce error
+  fkNameTooLong: `
+CREATE TABLE parent (
+  id INT PRIMARY KEY
+);
+CREATE TABLE child (
+  id INT PRIMARY KEY,
+  parent_id INT,
+  CONSTRAINT this_is_a_very_long_foreign_key_name_that_exceeds_the_sixty_four_character_limit_by_far FOREIGN KEY (parent_id) REFERENCES parent(id)
+);`,
+
+  // FK name within 64 characters - should NOT produce error
+  fkNameNormal: `
+CREATE TABLE parent (
+  id INT PRIMARY KEY
+);
+CREATE TABLE child (
+  id INT PRIMARY KEY,
+  parent_id INT,
+  CONSTRAINT fk_child_parent FOREIGN KEY (parent_id) REFERENCES parent(id)
 );`
 };
 

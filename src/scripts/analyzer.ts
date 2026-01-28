@@ -1385,7 +1385,27 @@ export class FileAnalyzer {
    * Collect FK references from SQL content and add to pending checks
    */
   private collectForeignKeyReferences(table: TableInfo, fileName: string): void {
+    const MAX_FK_NAME_LENGTH = 64;
+
     for (const fk of table.foreignKeys) {
+      // Check FK name length (MySQL 8.4 limit is 64 characters)
+      if (fk.name.length > MAX_FK_NAME_LENGTH) {
+        this.addIssue({
+          id: 'fk_name_too_long_parsed',
+          type: 'schema',
+          category: 'invalidObjects',
+          severity: 'error',
+          title: '외래키 이름 길이 초과',
+          description: `테이블 '${table.name}'의 외래키 이름 '${fk.name.substring(0, 30)}...'이(가) ${fk.name.length}자입니다. MySQL 8.4에서는 최대 64자까지 허용됩니다.`,
+          suggestion: `외래키 이름을 64자 이내로 줄이세요.`,
+          location: fileName,
+          tableName: table.name,
+          code: `CONSTRAINT ${fk.name.substring(0, 50)}...`,
+          fixQuery: `ALTER TABLE \`${table.name}\` DROP FOREIGN KEY \`${fk.name}\`, ADD CONSTRAINT \`fk_${table.name.substring(0, 20)}_${fk.columns[0]}\` FOREIGN KEY (${fk.columns.map(c => `\`${c}\``).join(', ')}) REFERENCES \`${fk.refTable}\`(${fk.refColumns.map(c => `\`${c}\``).join(', ')});`,
+          mysqlShellCheckId: 'foreignKeyConstraintNames'
+        });
+      }
+
       this.pendingFKChecks.push({
         issueId: `fk_${table.name}_${fk.name}`,
         sourceTable: table.name,
