@@ -9,13 +9,12 @@ import type {
   TableSchemas,
   ConfigSection,
   AnalysisProgress,
-  TableInfo,
-  UserInfo
+  TableInfo
 } from './types';
 import { compatibilityRules } from './rules';
 import { REMOVED_SYS_VARS_84, SYS_VARS_NEW_DEFAULTS_84 } from './constants';
 import { parseCreateTable } from './parsers/table-parser';
-import { parseCreateUser, parseGrant, extractUsers } from './parsers/user-parser';
+import { extractUsers } from './parsers/user-parser';
 
 // Callback types for real-time updates
 export type OnIssueCallback = (issue: Issue) => void;
@@ -990,7 +989,7 @@ export class FileAnalyzer {
       const varConfig = SYS_VARS_NEW_DEFAULTS_84[varName as keyof typeof SYS_VARS_NEW_DEFAULTS_84];
       if (!varConfig) continue;
 
-      const [oldDefault, newDefault, description] = varConfig;
+      const [oldDefault, newDefault, _description] = varConfig;
       const currentValue = String(varValue);
 
       // If current value matches old default, it will change after upgrade

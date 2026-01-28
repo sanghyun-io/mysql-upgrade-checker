@@ -3,7 +3,7 @@
  * Tests file analysis for SQL, config, TSV, and JSON files
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { FileAnalyzer } from '../analyzer';
 import type { Issue, AnalysisProgress } from '../types';
 import {

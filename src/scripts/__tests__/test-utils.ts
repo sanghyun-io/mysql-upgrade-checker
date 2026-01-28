@@ -2,7 +2,7 @@
  * Test utilities and fixtures for MySQL Upgrade Checker tests
  */
 
-import type { Issue, AnalysisResults } from '../types';
+import type { Issue } from '../types';
 
 /**
  * Creates a mock File object for testing

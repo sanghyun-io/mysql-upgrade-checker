@@ -6,8 +6,7 @@ import { describe, it, expect } from 'vitest';
 import {
   parseTabSeparatedResult,
   parseJsonResult,
-  parseServerResult,
-  type ServerQueryResult
+  parseServerResult
 } from './server-result-parser';
 
 describe('parseTabSeparatedResult', () => {

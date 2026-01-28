@@ -9,14 +9,7 @@ import {
   REMOVED_SYS_VARS_84,
   SYS_VARS_NEW_DEFAULTS_84,
   NEW_RESERVED_KEYWORDS_84,
-  REMOVED_FUNCTIONS_84,
-  DEPRECATED_FUNCTIONS_84,
-  REMOVED_PRIVILEGES_84,
-  SUPER_REPLACEMENT_PRIVILEGES,
-  DEPRECATED_ENGINES,
-  INVALID_57_NAME_PATTERNS,
-  SHARED_TABLESPACES,
-  NON_NATIVE_PARTITION_ENGINES
+  REMOVED_FUNCTIONS_84
 } from '../constants';
 
 // ============================================================================
@@ -36,7 +29,7 @@ function testPatternMatch(ruleId: string, text: string): boolean {
 /**
  * Get all matches for a rule's pattern in the given text
  */
-function getPatternMatches(ruleId: string, text: string): string[] {
+function _getPatternMatches(ruleId: string, text: string): string[] {
   const rule = compatibilityRules.find(r => r.id === ruleId);
   if (!rule?.pattern) return [];
   rule.pattern.lastIndex = 0;
@@ -47,7 +40,7 @@ function getPatternMatches(ruleId: string, text: string): string[] {
 /**
  * Test detectInData callback for data rules
  */
-function testDetectInData(ruleId: string, value: string, columnType?: string): boolean {
+function _testDetectInData(ruleId: string, value: string, columnType?: string): boolean {
   const rule = compatibilityRules.find(r => r.id === ruleId);
   if (!rule?.detectInData) return false;
   return rule.detectInData(value, columnType);
