@@ -7,7 +7,7 @@ MySQL 8.0에서 8.4로 업그레이드하기 전에 호환성 문제를 감지�
 ![MySQL Upgrade Checker](https://img.shields.io/badge/MySQL-8.0→8.4-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![No Server Required](https://img.shields.io/badge/server-not%20required-brightgreen)
-![Tests](https://img.shields.io/badge/tests-288%20passed-brightgreen)
+![Tests](https://img.shields.io/badge/tests-334%20passed-brightgreen)
 
 ## 라이브 데모
 
@@ -317,7 +317,7 @@ mysql-upgrade-checker/
 |------|------|
 | **TypeScript** | 타입 안전 개발 |
 | **Vite** | 빠른 빌드 및 HMR |
-| **Vitest** | 단위 테스트 (288개 테스트) |
+| **Vitest** | 단위 테스트 (334개 테스트) |
 | **Vanilla JS/CSS** | 프레임워크 의존성 없음 |
 | **File API** | 클라이언트 사이드 파일 읽기 |
 | **Blob API** | 파일 다운로드 생성 |

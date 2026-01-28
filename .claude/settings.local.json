@@ -39,7 +39,8 @@
       "Bash(powershell -Command \"cd ''C:\\\\Users\\\\QESG\\\\Documents\\\\sanghyun-git\\\\mysql-upgrade-checker''; npm run test:run 2>&1 | Select-Object -First 80\")",
       "Bash(powershell -Command \"cd ''C:\\\\Users\\\\QESG\\\\Documents\\\\sanghyun-git\\\\mysql-upgrade-checker''; npx vitest run src/scripts/__tests__/parsers/table-parser.test.ts 2>&1 | Select-Object -Last 100\")",
       "Bash(powershell -Command \"cd ''C:\\\\Users\\\\QESG\\\\Documents\\\\sanghyun-git\\\\mysql-upgrade-checker''; npx vitest run src/scripts/__tests__/parsers/table-parser.test.ts 2>&1 | Select-Object -Last 40\")",
-      "Bash(powershell:*)"
+      "Bash(powershell:*)",
+      "Bash(Select-Object -Last 10)"
     ]
   }
 }

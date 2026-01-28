@@ -7,7 +7,7 @@ A comprehensive web-based static analysis tool that detects compatibility issues
 ![MySQL Upgrade Checker](https://img.shields.io/badge/MySQL-8.0→8.4-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![No Server Required](https://img.shields.io/badge/server-not%20required-brightgreen)
-![Tests](https://img.shields.io/badge/tests-288%20passed-brightgreen)
+![Tests](https://img.shields.io/badge/tests-334%20passed-brightgreen)
 
 ## Live Demo
 
@@ -317,7 +317,7 @@ mysql-upgrade-checker/
 |------------|---------|
 | **TypeScript** | Type-safe development |
 | **Vite** | Fast build and HMR |
-| **Vitest** | Unit testing (288 tests) |
+| **Vitest** | Unit testing (334 tests) |
 | **Vanilla JS/CSS** | No framework dependencies |
 | **File API** | Client-side file reading |
 | **Blob API** | File download generation |
