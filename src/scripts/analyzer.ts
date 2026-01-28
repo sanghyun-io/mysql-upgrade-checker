@@ -570,32 +570,36 @@ export class FileAnalyzer {
         }
       }
 
-      // ENUM empty value check
+      // ENUM empty value check - only warn if ENUM definition doesn't include empty string
       for (let i = 0; i < columns.length; i++) {
         const columnName = columns[i];
         const columnType = schema[columnName];
 
         if (columnType && /ENUM/i.test(columnType)) {
-          if (/[,\(]['"]['"]/i.test(valuesStr)) {
-            const rule = compatibilityRules.find((r) => r.id === 'enum_empty_value');
-            if (rule) {
-              const enumValues = this.extractEnumValues(columnType);
+          // Check if values string contains empty string as a value: ('') or , '',
+          // Pattern allows optional whitespace after comma/parenthesis
+          if (/[,\(]\s*['"]['"]/i.test(valuesStr)) {
+            const enumValues = this.extractEnumValues(columnType);
 
+            // Only report if ENUM definition doesn't include empty string
+            const hasEmptyInDefinition = enumValues.some(v => v === '');
+
+            if (!hasEmptyInDefinition) {
               this.addIssue({
-                ...rule,
+                id: 'enum_empty_value_not_defined',
+                type: 'data',
+                category: 'dataIntegrity',
+                severity: 'warning',
+                title: 'ENUM 정의에 없는 빈 값 삽입',
+                description: `테이블 '${tableName}'의 ENUM 컬럼 '${columnName}'에 빈 값('')이 삽입되었으나, ENUM 정의에 빈 값이 포함되어 있지 않습니다. MySQL 8.4에서 엄격 모드가 활성화되면 오류가 발생할 수 있습니다.`,
+                suggestion: `ENUM 정의에 빈 값을 추가하거나, NULL을 사용하세요: ALTER TABLE \`${tableName}\` MODIFY COLUMN \`${columnName}\` ENUM('', ${enumValues.map(v => `'${v}'`).join(', ')});`,
                 location: `${fileName} - Table: ${tableName}, Column: ${columnName}`,
                 code: valuesStr.substring(0, 200) + '...',
                 tableName: tableName,
                 columnName: columnName,
                 columnType: columnType,
                 enumValues: enumValues,
-                fixQuery:
-                  rule.generateFixQuery?.({
-                    tableName,
-                    columnName,
-                    columnType,
-                    enumValues
-                  }) || null
+                mysqlShellCheckId: 'enumSetEmptyValue'
               });
             }
           }

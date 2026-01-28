@@ -684,7 +684,34 @@ CREATE TABLE modern_customers (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;`,
     data: `
 INSERT INTO modern_customers (id, name) VALUES (1, 'José García');`
-  }
+  },
+
+  // ENUM with empty value inserted but not defined - should produce warning
+  enumEmptyNotDefined: `
+CREATE TABLE user_status (
+  id INT PRIMARY KEY,
+  status ENUM('active', 'inactive', 'pending')
+);
+INSERT INTO user_status (id, status) VALUES (1, 'active');
+INSERT INTO user_status (id, status) VALUES (2, '');`,
+
+  // ENUM with empty value inserted and defined - should NOT produce warning
+  enumEmptyDefined: `
+CREATE TABLE user_status_with_empty (
+  id INT PRIMARY KEY,
+  status ENUM('', 'active', 'inactive', 'pending')
+);
+INSERT INTO user_status_with_empty (id, status) VALUES (1, 'active');
+INSERT INTO user_status_with_empty (id, status) VALUES (2, '');`,
+
+  // ENUM without any empty value inserted - should NOT produce warning
+  enumNoEmpty: `
+CREATE TABLE user_status_no_empty (
+  id INT PRIMARY KEY,
+  status ENUM('active', 'inactive', 'pending')
+);
+INSERT INTO user_status_no_empty (id, status) VALUES (1, 'active');
+INSERT INTO user_status_no_empty (id, status) VALUES (2, 'pending');`
 };
 
 // ============================================================================

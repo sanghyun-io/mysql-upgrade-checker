@@ -1080,3 +1080,38 @@ describe('FileAnalyzer - Latin1 Non-ASCII Data Detection', () => {
     });
   });
 });
+
+// ============================================================================
+// ENUM EMPTY VALUE + DEFINITION CROSS-VALIDATION TESTS
+// ============================================================================
+
+describe('FileAnalyzer - ENUM Empty Value Cross-Validation', () => {
+  describe('ENUM empty value inserted but not defined', () => {
+    it('should report warning when empty value is inserted but not in ENUM definition', async () => {
+      const issues = await analyzeContent('user_status.sql', TWO_PASS_FIXTURES.enumEmptyNotDefined);
+
+      const enumIssue = findIssueById(issues, 'enum_empty_value_not_defined');
+      expect(enumIssue).toBeDefined();
+      expect(enumIssue?.severity).toBe('warning');
+      expect(enumIssue?.description).toContain('빈 값');
+    });
+  });
+
+  describe('ENUM empty value inserted and defined', () => {
+    it('should NOT report warning when empty value is in ENUM definition', async () => {
+      const issues = await analyzeContent('user_status_defined.sql', TWO_PASS_FIXTURES.enumEmptyDefined);
+
+      const enumIssue = findIssueById(issues, 'enum_empty_value_not_defined');
+      expect(enumIssue).toBeUndefined();
+    });
+  });
+
+  describe('ENUM without empty value inserted', () => {
+    it('should NOT report warning when no empty value is inserted', async () => {
+      const issues = await analyzeContent('user_status_no_empty.sql', TWO_PASS_FIXTURES.enumNoEmpty);
+
+      const enumIssue = findIssueById(issues, 'enum_empty_value_not_defined');
+      expect(enumIssue).toBeUndefined();
+    });
+  });
+});
