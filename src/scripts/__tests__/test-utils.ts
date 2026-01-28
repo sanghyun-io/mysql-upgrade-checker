@@ -468,7 +468,48 @@ CREATE TABLE messages_utf8mb3 (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3;`,
     data: `
 INSERT INTO messages_utf8mb3 (id, content) VALUES (1, 'Hello 🎉 Party');`
-  }
+  },
+
+  // Index too large with utf8mb4 (VARCHAR(800)*4 = 3200 bytes > 3072)
+  indexTooLargeUtf8mb4: `
+CREATE TABLE large_index_utf8mb4 (
+  id INT PRIMARY KEY,
+  long_text VARCHAR(800),
+  INDEX idx_long_text (long_text)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;`,
+
+  // Index within limit with utf8mb4 (VARCHAR(768)*4 = 3072 bytes = 3072 max)
+  indexWithinLimitUtf8mb4: `
+CREATE TABLE valid_index_utf8mb4 (
+  id INT PRIMARY KEY,
+  medium_text VARCHAR(768),
+  INDEX idx_medium_text (medium_text)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;`,
+
+  // Index within limit with utf8mb3 (VARCHAR(800)*3 = 2400 bytes < 3072)
+  indexWithinLimitUtf8mb3: `
+CREATE TABLE valid_index_utf8mb3 (
+  id INT PRIMARY KEY,
+  long_text VARCHAR(800),
+  INDEX idx_long_text (long_text)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3;`,
+
+  // Index within limit with latin1 (VARCHAR(2000)*1 = 2000 bytes < 3072)
+  indexWithinLimitLatin1: `
+CREATE TABLE valid_index_latin1 (
+  id INT PRIMARY KEY,
+  very_long_text VARCHAR(2000),
+  INDEX idx_very_long (very_long_text)
+) ENGINE=InnoDB DEFAULT CHARSET=latin1;`,
+
+  // Composite index too large
+  compositeIndexTooLarge: `
+CREATE TABLE composite_large (
+  id INT PRIMARY KEY,
+  col1 VARCHAR(400),
+  col2 VARCHAR(400),
+  INDEX idx_composite (col1, col2)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;`
 };
 
 // ============================================================================

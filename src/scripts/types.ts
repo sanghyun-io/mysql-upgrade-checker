@@ -273,6 +273,8 @@ export interface ColumnCharsetInfo {
   charset?: string;
   collation?: string;
   type: string;
+  /** Parsed max length for VARCHAR/CHAR types */
+  maxLength?: number;
 }
 
 /**

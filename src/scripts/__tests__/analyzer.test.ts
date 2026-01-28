@@ -800,3 +800,61 @@ describe('FileAnalyzer - UTF-8 Cross-Validation', () => {
     });
   });
 });
+
+// ============================================================================
+// INDEX SIZE CALCULATION TESTS
+// ============================================================================
+
+describe('FileAnalyzer - Index Size Calculation', () => {
+  describe('Index too large with utf8mb4', () => {
+    it('should report error when index exceeds 3072 bytes with utf8mb4', async () => {
+      const issues = await analyzeContent('large_index.sql', TWO_PASS_FIXTURES.indexTooLargeUtf8mb4);
+
+      const indexIssue = findIssueById(issues, 'index_too_large_calculated');
+      expect(indexIssue).toBeDefined();
+      expect(indexIssue?.severity).toBe('error');
+      expect(indexIssue?.description).toContain('3200'); // 800 * 4 = 3200
+    });
+  });
+
+  describe('Index within limit with utf8mb4', () => {
+    it('should NOT report error when index is within 3072 bytes limit', async () => {
+      const issues = await analyzeContent('valid_index.sql', TWO_PASS_FIXTURES.indexWithinLimitUtf8mb4);
+
+      const indexIssue = findIssueById(issues, 'index_too_large_calculated');
+      expect(indexIssue).toBeUndefined();
+    });
+  });
+
+  describe('Index within limit with utf8mb3', () => {
+    it('should NOT report error when utf8mb3 index is within limit', async () => {
+      const issues = await analyzeContent('utf8mb3_index.sql', TWO_PASS_FIXTURES.indexWithinLimitUtf8mb3);
+
+      // 800 * 3 = 2400 bytes < 3072, so should be OK
+      const indexIssue = findIssueById(issues, 'index_too_large_calculated');
+      expect(indexIssue).toBeUndefined();
+    });
+  });
+
+  describe('Index within limit with latin1', () => {
+    it('should NOT report error when latin1 index is within limit', async () => {
+      const issues = await analyzeContent('latin1_index.sql', TWO_PASS_FIXTURES.indexWithinLimitLatin1);
+
+      // 2000 * 1 = 2000 bytes < 3072, so should be OK
+      const indexIssue = findIssueById(issues, 'index_too_large_calculated');
+      expect(indexIssue).toBeUndefined();
+    });
+  });
+
+  describe('Composite index too large', () => {
+    it('should report error for oversized composite index', async () => {
+      const issues = await analyzeContent('composite.sql', TWO_PASS_FIXTURES.compositeIndexTooLarge);
+
+      // (400 + 400) * 4 = 3200 bytes > 3072
+      const indexIssue = findIssueById(issues, 'index_too_large_calculated');
+      expect(indexIssue).toBeDefined();
+      expect(indexIssue?.description).toContain('col1');
+      expect(indexIssue?.description).toContain('col2');
+    });
+  });
+});

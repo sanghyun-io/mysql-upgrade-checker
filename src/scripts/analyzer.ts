@@ -694,6 +694,9 @@ export class FileAnalyzer {
 
         // Check ENUM element lengths with specific values
         this.checkEnumElementLengths(table, fileName);
+
+        // Check index sizes with accurate charset-based calculation
+        this.checkIndexSizes(table, fileName);
       }
     }
   }
@@ -1035,7 +1038,8 @@ export class FileAnalyzer {
         const colCharsetInfo: ColumnCharsetInfo = {
           charset: column.charset?.toLowerCase(),
           collation: column.collation?.toLowerCase(),
-          type: column.type
+          type: column.type,
+          maxLength: this.extractColumnLength(column.type)
         };
         charsetInfo.columns.set(column.name.toLowerCase(), colCharsetInfo);
       }
@@ -1075,6 +1079,194 @@ export class FileAnalyzer {
 
     // No charset info - assume potential issue
     return false;
+  }
+
+  /**
+   * Extract the length from a column type definition (e.g., VARCHAR(255) -> 255)
+   */
+  private extractColumnLength(columnType: string): number | undefined {
+    const match = columnType.match(/(?:VARCHAR|CHAR|VARBINARY|BINARY)\s*\((\d+)\)/i);
+    if (match) {
+      return parseInt(match[1], 10);
+    }
+    return undefined;
+  }
+
+  /**
+   * Get the byte multiplier for a charset
+   * utf8mb4 = 4 bytes per character
+   * utf8/utf8mb3 = 3 bytes per character
+   * latin1 = 1 byte per character
+   */
+  private getCharsetByteMultiplier(charset?: string): number {
+    if (!charset) return 4; // Default to utf8mb4 (most conservative)
+    const lowerCharset = charset.toLowerCase();
+    if (lowerCharset === 'utf8mb4') return 4;
+    if (lowerCharset === 'utf8' || lowerCharset === 'utf8mb3') return 3;
+    if (lowerCharset === 'latin1' || lowerCharset === 'ascii') return 1;
+    if (lowerCharset === 'ucs2' || lowerCharset === 'utf16') return 2;
+    if (lowerCharset === 'utf32') return 4;
+    return 4; // Default to 4 for unknown charsets (conservative)
+  }
+
+  /**
+   * Calculate index key size for a table's index
+   * InnoDB max index key size: 3072 bytes (with innodb_large_prefix=ON, which is default in 8.0+)
+   */
+  private calculateIndexKeySize(
+    tableName: string,
+    indexColumns: string[],
+    prefixLengths?: number[]
+  ): { totalBytes: number; columnDetails: Array<{ column: string; bytes: number }> } {
+    const MAX_INDEX_KEY_SIZE = 3072;
+    const tableKey = tableName.toLowerCase();
+    const charsetInfo = this.tableCharsetMap.get(tableKey);
+    const columnDetails: Array<{ column: string; bytes: number }> = [];
+    let totalBytes = 0;
+
+    for (let i = 0; i < indexColumns.length; i++) {
+      const colName = indexColumns[i];
+      const colKey = colName.toLowerCase();
+      const prefixLength = prefixLengths?.[i];
+
+      let columnBytes = 0;
+
+      if (charsetInfo) {
+        const colInfo = charsetInfo.columns.get(colKey);
+
+        if (colInfo) {
+          // Determine charset (column charset > table charset > default)
+          const charset = colInfo.charset || charsetInfo.tableCharset || 'utf8mb4';
+          const byteMultiplier = this.getCharsetByteMultiplier(charset);
+
+          // Calculate bytes
+          if (colInfo.maxLength !== undefined) {
+            // VARCHAR/CHAR type
+            const effectiveLength = prefixLength !== undefined
+              ? Math.min(prefixLength, colInfo.maxLength)
+              : colInfo.maxLength;
+            columnBytes = effectiveLength * byteMultiplier;
+          } else {
+            // Non-string types (INT, DATE, etc.) - estimate based on type
+            columnBytes = this.estimateTypeSize(colInfo.type);
+          }
+        }
+      }
+
+      // If no info found, use conservative estimate
+      if (columnBytes === 0) {
+        columnBytes = prefixLength !== undefined ? prefixLength * 4 : 255 * 4;
+      }
+
+      columnDetails.push({ column: colName, bytes: columnBytes });
+      totalBytes += columnBytes;
+    }
+
+    return { totalBytes, columnDetails };
+  }
+
+  /**
+   * Estimate the byte size of a column type
+   */
+  private estimateTypeSize(columnType: string): number {
+    const type = columnType.toUpperCase();
+
+    // Integer types
+    if (type.includes('TINYINT')) return 1;
+    if (type.includes('SMALLINT')) return 2;
+    if (type.includes('MEDIUMINT')) return 3;
+    if (type.includes('BIGINT')) return 8;
+    if (type.includes('INT')) return 4;
+
+    // Floating point
+    if (type.includes('FLOAT')) return 4;
+    if (type.includes('DOUBLE') || type.includes('REAL')) return 8;
+    if (type.includes('DECIMAL') || type.includes('NUMERIC')) {
+      // DECIMAL(M,D) uses approximately M/2 bytes
+      const match = type.match(/DECIMAL\s*\((\d+)/i);
+      if (match) return Math.ceil(parseInt(match[1], 10) / 2) + 2;
+      return 10;
+    }
+
+    // Date/Time types
+    if (type.includes('DATE')) return 3;
+    if (type.includes('TIME')) return 3;
+    if (type.includes('DATETIME')) return 8;
+    if (type.includes('TIMESTAMP')) return 4;
+    if (type.includes('YEAR')) return 1;
+
+    // Binary/Blob
+    if (type.includes('BINARY') || type.includes('VARBINARY')) {
+      const match = type.match(/(?:VAR)?BINARY\s*\((\d+)\)/i);
+      if (match) return parseInt(match[1], 10);
+      return 255;
+    }
+
+    // Default for unknown types
+    return 8;
+  }
+
+  /**
+   * Check index sizes for all tables and report issues
+   * Called during Pass 2 schema analysis
+   */
+  private checkIndexSizes(table: TableInfo, fileName: string): void {
+    const MAX_INDEX_KEY_SIZE = 3072;
+
+    for (const index of table.indexes) {
+      const { totalBytes, columnDetails } = this.calculateIndexKeySize(
+        table.name,
+        index.columns,
+        index.prefixLengths
+      );
+
+      if (totalBytes > MAX_INDEX_KEY_SIZE) {
+        const detailsStr = columnDetails
+          .map(d => `${d.column}(${d.bytes}bytes)`)
+          .join(' + ');
+
+        this.addIssue({
+          id: 'index_too_large_calculated',
+          type: 'schema',
+          category: 'invalidObjects',
+          severity: 'error',
+          title: '인덱스 키 크기 초과',
+          description: `테이블 '${table.name}'의 인덱스 '${index.name}'의 키 크기가 ${totalBytes}바이트로, 최대 허용 크기(${MAX_INDEX_KEY_SIZE}바이트)를 초과합니다. [${detailsStr}]`,
+          suggestion: '프리픽스 인덱스를 사용하거나 컬럼 크기를 줄이세요.',
+          location: fileName,
+          tableName: table.name,
+          code: `INDEX ${index.name} (${index.columns.join(', ')})`,
+          mysqlShellCheckId: 'indexTooLarge',
+          fixQuery: this.generatePrefixIndexFix(table.name, index.name, index.columns, columnDetails)
+        });
+      }
+    }
+  }
+
+  /**
+   * Generate a fix query for oversized index using prefix
+   */
+  private generatePrefixIndexFix(
+    tableName: string,
+    indexName: string,
+    columns: string[],
+    columnDetails: Array<{ column: string; bytes: number }>
+  ): string {
+    // Calculate suggested prefix lengths to fit within 3072 bytes
+    const MAX_INDEX_KEY_SIZE = 3072;
+    const totalBytes = columnDetails.reduce((sum, d) => sum + d.bytes, 0);
+    const ratio = MAX_INDEX_KEY_SIZE / totalBytes * 0.9; // 90% to be safe
+
+    const prefixedColumns = columnDetails.map(d => {
+      // Only add prefix for string columns (large bytes typically mean string)
+      if (d.bytes > 100) {
+        const suggestedPrefix = Math.floor(d.bytes * ratio / 4); // Assuming utf8mb4
+        return `\`${d.column}\`(${Math.min(suggestedPrefix, 191)})`;
+      }
+      return `\`${d.column}\``;
+    });
+
+    return `ALTER TABLE \`${tableName}\` DROP INDEX \`${indexName}\`, ADD INDEX \`${indexName}\` (${prefixedColumns.join(', ')});`;
   }
 
   /**
