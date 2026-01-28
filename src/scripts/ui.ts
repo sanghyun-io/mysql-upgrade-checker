@@ -5,11 +5,20 @@
 
 import type { AnalysisResults, Issue, RuleCategory, GroupedIssues, Severity } from './types';
 import { CATEGORY_LABELS, CATEGORY_DESCRIPTIONS, CATEGORY_ORDER } from './types';
-import { TOTAL_RULE_COUNT } from './rules';
+import { TOTAL_RULE_COUNT } from './rules/index';
 import { showError } from './toast';
 
 // Severity order for sorting (error first, then warning, then info)
 const SEVERITY_ORDER: Record<Severity, number> = { error: 0, warning: 1, info: 2 };
+
+// ============================================================================
+// FILTER STATE
+// ============================================================================
+export interface FilterState {
+  severity: 'all' | Severity;
+  category: 'all' | RuleCategory;
+  searchText: string;
+}
 
 export class UIManager {
   private progressSection: HTMLElement;
@@ -17,6 +26,7 @@ export class UIManager {
   private progressBar: HTMLElement;
   private progressText: HTMLElement;
   private issuesContainer: HTMLElement;
+  private filterSection: HTMLElement | null = null;
 
   // Streaming mode state
   private streamingMode: boolean = false;
@@ -24,12 +34,21 @@ export class UIManager {
   private currentGroups: Map<RuleCategory, HTMLElement> = new Map();
   private categoryNav: HTMLElement | null = null;
 
+  // Filter state
+  private filterState: FilterState = {
+    severity: 'all',
+    category: 'all',
+    searchText: ''
+  };
+  private allIssues: Issue[] = [];
+
   constructor() {
     this.progressSection = document.getElementById('progressSection')!;
     this.resultsSection = document.getElementById('resultsSection')!;
     this.progressBar = document.getElementById('progressBar')!;
     this.progressText = document.getElementById('progressText')!;
     this.issuesContainer = document.getElementById('issuesContainer')!;
+    this.filterSection = document.getElementById('filterSection');
   }
 
   showProgress(): void {
@@ -56,6 +75,9 @@ export class UIManager {
     document.getElementById('errorCount')!.textContent = String(results.stats.error || 0);
     document.getElementById('warningCount')!.textContent = String(results.stats.warning || 0);
     document.getElementById('infoCount')!.textContent = String(results.stats.info || 0);
+
+    // Initialize filters
+    this.initializeFilters(results);
 
     // Display issues
     if (results.issues.length === 0) {
@@ -211,7 +233,7 @@ export class UIManager {
 
   private insertCategorySectionInOrder(section: HTMLElement, category: RuleCategory): void {
     const categoryIndex = CATEGORY_ORDER.indexOf(category);
-    const existingSections = this.issuesContainer.querySelectorAll('.category-section');
+    const existingSections = Array.from(this.issuesContainer.querySelectorAll('.category-section'));
 
     let insertBefore: HTMLElement | null = null;
 
@@ -236,7 +258,7 @@ export class UIManager {
     if (!issuesContainer) return;
 
     const severityOrder = SEVERITY_ORDER[severity];
-    const existingIssues = issuesContainer.querySelectorAll('.issue-card');
+    const existingIssues = Array.from(issuesContainer.querySelectorAll('.issue-card'));
 
     let insertBefore: Element | null = null;
 
@@ -490,6 +512,203 @@ export class UIManager {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
+  }
+
+  // ==========================================================================
+  // FILTERING METHODS
+  // ==========================================================================
+
+  /**
+   * Initialize filter UI and event listeners
+   */
+  initializeFilters(results: AnalysisResults): void {
+    this.allIssues = results.issues;
+
+    if (!this.filterSection) return;
+
+    // Show filter section if there are issues
+    if (results.issues.length > 0) {
+      this.filterSection.classList.add('show');
+    }
+
+    // Initialize category filter buttons
+    this.initializeCategoryFilters();
+
+    // Add event listeners
+    this.attachFilterEventListeners();
+  }
+
+  /**
+   * Initialize category filter buttons
+   */
+  private initializeCategoryFilters(): void {
+    const container = document.getElementById('categoryFilterButtons');
+    if (!container) return;
+
+    // Get unique categories from all issues
+    const categories = new Set<RuleCategory>();
+    this.allIssues.forEach(issue => {
+      categories.add(issue.category || 'invalidObjects');
+    });
+
+    // Create buttons
+    const buttons: string[] = ['<button class="filter-btn active" data-filter="category" data-value="all">전체</button>'];
+
+    CATEGORY_ORDER.forEach(category => {
+      if (categories.has(category)) {
+        buttons.push(`<button class="filter-btn" data-filter="category" data-value="${category}">${CATEGORY_LABELS[category]}</button>`);
+      }
+    });
+
+    container.innerHTML = buttons.join('');
+  }
+
+  /**
+   * Attach filter event listeners
+   */
+  private attachFilterEventListeners(): void {
+    // Filter buttons
+    document.querySelectorAll('.filter-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const target = e.target as HTMLElement;
+        const filterType = target.getAttribute('data-filter');
+        const value = target.getAttribute('data-value');
+
+        if (!filterType || !value) return;
+
+        // Update active state
+        const siblings = target.parentElement?.querySelectorAll(`.filter-btn[data-filter="${filterType}"]`);
+        siblings?.forEach(s => s.classList.remove('active'));
+        target.classList.add('active');
+
+        // Update filter state
+        if (filterType === 'severity') {
+          this.filterState.severity = value as any;
+        } else if (filterType === 'category') {
+          this.filterState.category = value as any;
+        }
+
+        this.applyFilters();
+      });
+    });
+
+    // Search input
+    const searchInput = document.getElementById('filterSearchInput') as HTMLInputElement;
+    if (searchInput) {
+      searchInput.addEventListener('input', (e) => {
+        this.filterState.searchText = (e.target as HTMLInputElement).value.toLowerCase();
+        this.applyFilters();
+      });
+    }
+
+    // Reset button
+    const resetBtn = document.getElementById('resetFilterBtn');
+    if (resetBtn) {
+      resetBtn.addEventListener('click', () => {
+        this.resetFilters();
+      });
+    }
+  }
+
+  /**
+   * Apply current filters to issues
+   */
+  applyFilters(): void {
+    const filtered = this.filterIssues(this.allIssues, this.filterState);
+
+    // Re-render issues with filtered data
+    const groupedIssues = this.groupIssuesByCategory(filtered);
+    this.issuesContainer.innerHTML = this.renderGroupedIssues(groupedIssues, {
+      issues: filtered,
+      stats: {
+        safe: 0,
+        error: filtered.filter(i => i.severity === 'error').length,
+        warning: filtered.filter(i => i.severity === 'warning').length,
+        info: filtered.filter(i => i.severity === 'info').length
+      }
+    });
+  }
+
+  /**
+   * Filter issues based on filter state
+   */
+  private filterIssues(issues: Issue[], filter: FilterState): Issue[] {
+    return issues.filter(issue => {
+      // Severity filter
+      if (filter.severity !== 'all' && issue.severity !== filter.severity) {
+        return false;
+      }
+
+      // Category filter
+      const issueCategory = issue.category || 'invalidObjects';
+      if (filter.category !== 'all' && issueCategory !== filter.category) {
+        return false;
+      }
+
+      // Search text filter
+      if (filter.searchText) {
+        const searchLower = filter.searchText;
+        const matchFields = [
+          issue.title,
+          issue.description,
+          issue.suggestion,
+          issue.location,
+          issue.code,
+          issue.tableName,
+          issue.columnName,
+          issue.objectName
+        ].filter(Boolean).map(s => s!.toLowerCase());
+
+        const hasMatch = matchFields.some(field => field.includes(searchLower));
+        if (!hasMatch) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+  }
+
+  /**
+   * Reset all filters
+   */
+  private resetFilters(): void {
+    this.filterState = {
+      severity: 'all',
+      category: 'all',
+      searchText: ''
+    };
+
+    // Reset UI
+    document.querySelectorAll('.filter-btn').forEach(btn => {
+      const value = btn.getAttribute('data-value');
+      if (value === 'all') {
+        btn.classList.add('active');
+      } else {
+        btn.classList.remove('active');
+      }
+    });
+
+    const searchInput = document.getElementById('filterSearchInput') as HTMLInputElement;
+    if (searchInput) {
+      searchInput.value = '';
+    }
+
+    this.applyFilters();
+  }
+
+  /**
+   * Get filtered issues (for export)
+   */
+  getFilteredIssues(): Issue[] {
+    return this.filterIssues(this.allIssues, this.filterState);
+  }
+
+  /**
+   * Get all issues (for export)
+   */
+  getAllIssues(): Issue[] {
+    return this.allIssues;
   }
 }
 

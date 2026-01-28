@@ -53,16 +53,35 @@
                     <div class="step-card">
                         <div class="step-number">1</div>
                         <div class="step-content">
-                            <h3>쿼리 다운로드</h3>
-                            <p>서버 검사용 SQL 쿼리를 다운로드합니다.</p>
-                            <button class="btn btn-secondary" onclick="downloadServerQuery()">
-                                📥 SQL 쿼리 다운로드
-                            </button>
+                            <h3>검사 항목 선택</h3>
+                            <p>실행할 검사 항목을 선택하세요.</p>
+                            <select id="serverCheckSelect" class="server-check-select">
+                                <option value="">-- 검사 항목 선택 --</option>
+                            </select>
+                            <div id="serverCheckDescription" class="server-check-description" style="display: none;"></div>
+                            <div id="serverQueryDisplay" class="server-query-display" style="display: none;">
+                                <div class="query-header">
+                                    <strong>실행할 쿼리</strong>
+                                    <button class="btn-copy-small" onclick="copyServerQuery()">📋 복사</button>
+                                </div>
+                                <pre id="serverQueryCode" class="query-code"></pre>
+                            </div>
                         </div>
                     </div>
 
                     <div class="step-card">
                         <div class="step-number">2</div>
+                        <div class="step-content">
+                            <h3>전체 검사 쿼리 다운로드</h3>
+                            <p>모든 서버 검사용 SQL 쿼리를 한번에 다운로드합니다.</p>
+                            <button class="btn btn-secondary" onclick="downloadServerQuery()">
+                                📥 통합 SQL 쿼리 다운로드
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="step-card">
+                        <div class="step-number">3</div>
                         <div class="step-content">
                             <h3>서버에서 실행</h3>
                             <p>MySQL 서버에서 쿼리를 실행하고 결과 파일을 저장합니다.</p>
@@ -244,7 +263,7 @@
                     </div>
 
                     <div class="step-card">
-                        <div class="step-number">3</div>
+                        <div class="step-number">4</div>
                         <div class="step-content">
                             <h3>결과 업로드</h3>
                             <p>실행 결과 파일(JSON 또는 텍스트)을 업로드합니다.</p>
@@ -329,15 +348,58 @@
                 </div>
             </div>
 
+            <!-- Filter Section -->
+            <div class="filter-section" id="filterSection">
+                <div class="filter-header">
+                    <h3>🔍 필터</h3>
+                    <button class="btn-reset-filter" id="resetFilterBtn">초기화</button>
+                </div>
+                <div class="filter-controls">
+                    <!-- Severity Filter -->
+                    <div class="filter-group">
+                        <label class="filter-label">심각도</label>
+                        <div class="filter-buttons">
+                            <button class="filter-btn active" data-filter="severity" data-value="all">전체</button>
+                            <button class="filter-btn" data-filter="severity" data-value="error">오류</button>
+                            <button class="filter-btn" data-filter="severity" data-value="warning">경고</button>
+                            <button class="filter-btn" data-filter="severity" data-value="info">정보</button>
+                        </div>
+                    </div>
+
+                    <!-- Category Filter -->
+                    <div class="filter-group">
+                        <label class="filter-label">카테고리</label>
+                        <div class="filter-buttons" id="categoryFilterButtons">
+                            <!-- Dynamically populated -->
+                        </div>
+                    </div>
+
+                    <!-- Text Search -->
+                    <div class="filter-group">
+                        <label class="filter-label">텍스트 검색</label>
+                        <input type="text" class="filter-search" id="filterSearchInput" placeholder="제목, 설명, 위치 등으로 검색...">
+                    </div>
+                </div>
+            </div>
+
             <div class="issues-container" id="issuesContainer"></div>
 
             <div class="export-section">
-                <button class="btn btn-secondary" onclick="exportReport()">
-                    📄 리포트 다운로드 (JSON)
-                </button>
-                <button class="btn btn-primary" onclick="exportAllFixQueries()" style="margin-left: 15px;">
-                    🔧 모든 수정 쿼리 다운로드 (SQL)
-                </button>
+                <h3>📥 내보내기</h3>
+                <div class="export-buttons">
+                    <button class="btn btn-secondary" onclick="exportJSON()">
+                        📄 JSON
+                    </button>
+                    <button class="btn btn-secondary" onclick="exportCSV()">
+                        📊 CSV
+                    </button>
+                    <button class="btn btn-secondary" onclick="exportMySQLShell()">
+                        🐚 MySQL Shell 형식
+                    </button>
+                    <button class="btn btn-primary" onclick="exportAllFixQueries()">
+                        🔧 수정 쿼리 (SQL)
+                    </button>
+                </div>
             </div>
         </div>
 
