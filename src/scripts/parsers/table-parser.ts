@@ -269,6 +269,31 @@ function parseIndexes(tableBody: string): IndexInfo[] {
       continue;
     }
 
+    // FULLTEXT KEY/INDEX
+    const fulltextMatch = trimmed.match(/FULLTEXT\s+(?:KEY|INDEX)?\s*(?:`([^`]+)`|(\w+))?\s*\(/i);
+    if (fulltextMatch) {
+      const indexName = fulltextMatch[1] || fulltextMatch[2] || 'fulltext_key';
+      // Find the column list - need to handle nested parentheses
+      const startPos = fulltextMatch.index! + fulltextMatch[0].length;
+      let depth = 1;
+      let endPos = startPos;
+      while (endPos < trimmed.length && depth > 0) {
+        if (trimmed[endPos] === '(') depth++;
+        if (trimmed[endPos] === ')') depth--;
+        endPos++;
+      }
+      const columnsList = trimmed.substring(startPos, endPos - 1);
+
+      const { columns } = parseIndexColumns(columnsList);
+      indexes.push({
+        name: indexName,
+        columns,
+        unique: false,
+        type: 'FULLTEXT'
+      });
+      continue;
+    }
+
     // Regular KEY/INDEX
     const keyMatch = trimmed.match(/(?:KEY|INDEX)\s+(?:`([^`]+)`|(\w+))\s*\(/i);
     if (keyMatch) {

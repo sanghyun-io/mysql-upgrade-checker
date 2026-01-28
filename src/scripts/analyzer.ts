@@ -57,6 +57,9 @@ export class FileAnalyzer {
   private knownTables: Set<string> = new Set();
   private pendingViewChecks: PendingViewCheck[] = [];
 
+  // 2-Pass analysis: FTS table prefix context validation
+  private tablesWithFulltextIndex: Set<string> = new Set();
+
   // Files content cache for 2-pass analysis
   private fileContentsCache: Map<string, string> = new Map();
 
@@ -754,8 +757,70 @@ export class FileAnalyzer {
 
         // Check reserved keyword conflicts
         this.checkReservedKeywords(table, fileName);
+
+        // Collect tables with FULLTEXT indexes for FTS_ prefix validation
+        this.collectFulltextIndexTables(table);
+
+        // Check FTS_ table prefix with context
+        this.checkFTSTablePrefix(table, fileName);
       }
     }
+  }
+
+  /**
+   * Collect tables that have FULLTEXT indexes
+   * Used for FTS_ prefix context validation
+   */
+  private collectFulltextIndexTables(table: TableInfo): void {
+    for (const index of table.indexes) {
+      if (index.type === 'FULLTEXT') {
+        this.tablesWithFulltextIndex.add(table.name.toLowerCase());
+        break;
+      }
+    }
+  }
+
+  /**
+   * Check FTS_ table prefix with context validation
+   * InnoDB creates internal FTS tables with pattern: FTS_<hex_table_id>_<suffix>
+   * User-created FTS_ tables should be warned, but not InnoDB internal tables
+   */
+  private checkFTSTablePrefix(table: TableInfo, fileName: string): void {
+    const tableName = table.name;
+    const upperName = tableName.toUpperCase();
+
+    // Check if table name starts with FTS_ or fts_
+    if (!upperName.startsWith('FTS_')) {
+      return;
+    }
+
+    // InnoDB internal FTS table pattern: FTS_<hex_table_id>_<suffix>
+    // Hex table IDs are typically 16 hex characters followed by an underscore
+    // Suffixes: CONFIG, INDEX_%, BEING_DELETED, BEING_DELETED_CACHE, DELETED, DELETED_CACHE
+    const internalFtsPattern = /^FTS_[0-9A-Fa-f]{16}_/i;
+
+    if (internalFtsPattern.test(tableName)) {
+      // This looks like an InnoDB internal FTS table, don't warn
+      // (These are typically not in mysqldump output anyway)
+      return;
+    }
+
+    // This is a user-created table with FTS_ prefix - warn
+    this.addIssue({
+      id: 'fts_tablename_parsed',
+      type: 'schema',
+      category: 'invalidObjects',
+      severity: 'error',
+      title: 'FTS_ 접두사 테이블 이름',
+      description: `테이블 '${tableName}'이(가) FTS_ 접두사를 사용합니다. 이 접두사는 InnoDB 전문검색(FULLTEXT) 내부 테이블에 예약되어 있습니다.`,
+      suggestion: '테이블 이름을 FTS_ 접두사를 사용하지 않는 이름으로 변경하세요.',
+      location: fileName,
+      tableName: tableName,
+      code: `CREATE TABLE ${tableName}`,
+      mysqlShellCheckId: 'tablesWithFtsPrefix',
+      docLink: 'https://dev.mysql.com/doc/refman/8.4/en/innodb-fulltext-index.html',
+      fixQuery: `ALTER TABLE \`${tableName}\` RENAME TO \`${tableName.replace(/^FTS_/i, '')}\`;`
+    });
   }
 
   /**

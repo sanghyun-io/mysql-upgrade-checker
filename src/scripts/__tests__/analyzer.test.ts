@@ -1162,3 +1162,48 @@ describe('FileAnalyzer - Shared Tablespace Partition Validation', () => {
     });
   });
 });
+
+// =============================================================================
+// FTS TABLE PREFIX CONTEXT VALIDATION (Task 11)
+// =============================================================================
+
+describe('FileAnalyzer - FTS Table Prefix Context Validation', () => {
+  describe('User-created FTS_ prefix table', () => {
+    it('should report error for user-created FTS_ prefix table', async () => {
+      const issues = await analyzeContent('fts_custom.sql', TWO_PASS_FIXTURES.ftsUserTable);
+
+      const ftsIssue = findIssueById(issues, 'fts_tablename_parsed');
+      expect(ftsIssue).toBeDefined();
+      expect(ftsIssue?.severity).toBe('error');
+      expect(ftsIssue?.tableName).toBe('FTS_my_custom_table');
+    });
+  });
+
+  describe('InnoDB internal FTS table pattern', () => {
+    it('should NOT report error for InnoDB internal FTS table pattern', async () => {
+      const issues = await analyzeContent('fts_internal.sql', TWO_PASS_FIXTURES.ftsInternalTable);
+
+      const ftsIssue = findIssueById(issues, 'fts_tablename_parsed');
+      expect(ftsIssue).toBeUndefined();
+    });
+  });
+
+  describe('Normal table without FTS_ prefix', () => {
+    it('should NOT report error for normal table', async () => {
+      const issues = await analyzeContent('products.sql', TWO_PASS_FIXTURES.normalTable);
+
+      const ftsIssue = findIssueById(issues, 'fts_tablename_parsed');
+      expect(ftsIssue).toBeUndefined();
+    });
+  });
+
+  describe('Table with FULLTEXT index', () => {
+    it('should correctly parse FULLTEXT index', async () => {
+      const issues = await analyzeContent('articles.sql', TWO_PASS_FIXTURES.tableWithFulltext);
+
+      // Should not have FTS_ prefix error since the table name is 'articles'
+      const ftsIssue = findIssueById(issues, 'fts_tablename_parsed');
+      expect(ftsIssue).toBeUndefined();
+    });
+  });
+});

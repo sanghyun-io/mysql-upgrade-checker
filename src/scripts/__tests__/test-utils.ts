@@ -767,6 +767,42 @@ ENGINE = InnoDB
 PARTITION BY RANGE (YEAR(sale_date)) (
   PARTITION p2023 VALUES LESS THAN (2024),
   PARTITION p2024 VALUES LESS THAN (2025)
+);`,
+
+  // ==============================
+  // FTS TABLE PREFIX CONTEXT
+  // ==============================
+
+  // User-created FTS_ prefix table - should produce error
+  ftsUserTable: `
+CREATE TABLE FTS_my_custom_table (
+  id INT PRIMARY KEY,
+  content TEXT
+);`,
+
+  // InnoDB internal FTS table pattern - should NOT produce error
+  ftsInternalTable: `
+CREATE TABLE FTS_0000000000000123_CONFIG (
+  id INT PRIMARY KEY,
+  value VARCHAR(200)
+);`,
+
+  // Normal table without FTS_ prefix - should NOT produce error
+  normalTable: `
+CREATE TABLE products (
+  id INT PRIMARY KEY,
+  name VARCHAR(200),
+  description TEXT,
+  FULLTEXT KEY ft_desc (description)
+);`,
+
+  // Table with FULLTEXT index (for context collection)
+  tableWithFulltext: `
+CREATE TABLE articles (
+  id INT PRIMARY KEY,
+  title VARCHAR(200),
+  body TEXT,
+  FULLTEXT INDEX ft_body (body)
 );`
 };
 
