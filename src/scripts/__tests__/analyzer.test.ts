@@ -894,3 +894,53 @@ describe('FileAnalyzer - Non-native Partitioning', () => {
     });
   });
 });
+
+// ============================================================================
+// GENERATED COLUMN FUNCTION TESTS
+// ============================================================================
+
+describe('FileAnalyzer - Generated Column Function Detection', () => {
+  describe('Generated column with IF function', () => {
+    it('should report warning for IF function in generated column', async () => {
+      const issues = await analyzeContent('calc.sql', TWO_PASS_FIXTURES.generatedColumnWithIF);
+
+      const genIssue = findIssueById(issues, 'generated_column_function_parsed');
+      expect(genIssue).toBeDefined();
+      expect(genIssue?.severity).toBe('warning');
+      expect(genIssue?.description).toContain('IF');
+      expect(genIssue?.description).toContain('max_val');
+    });
+  });
+
+  describe('Generated column with COALESCE function', () => {
+    it('should report warning for COALESCE function in generated column', async () => {
+      const issues = await analyzeContent('defaults.sql', TWO_PASS_FIXTURES.generatedColumnWithCoalesce);
+
+      const genIssue = findIssueById(issues, 'generated_column_function_parsed');
+      expect(genIssue).toBeDefined();
+      expect(genIssue?.description).toContain('COALESCE');
+    });
+  });
+
+  describe('Generated column with multiple changed functions', () => {
+    it('should report all changed functions in generated column', async () => {
+      const issues = await analyzeContent('complex.sql', TWO_PASS_FIXTURES.generatedColumnMultipleFuncs);
+
+      const genIssue = findIssueById(issues, 'generated_column_function_parsed');
+      expect(genIssue).toBeDefined();
+      // Should contain GREATEST, LEAST, IFNULL
+      expect(genIssue?.description).toContain('GREATEST');
+      expect(genIssue?.description).toContain('LEAST');
+      expect(genIssue?.description).toContain('IFNULL');
+    });
+  });
+
+  describe('Generated column with normal functions', () => {
+    it('should NOT report warning for normal functions in generated column', async () => {
+      const issues = await analyzeContent('simple.sql', TWO_PASS_FIXTURES.generatedColumnNormal);
+
+      const genIssue = findIssueById(issues, 'generated_column_function_parsed');
+      expect(genIssue).toBeUndefined();
+    });
+  });
+});

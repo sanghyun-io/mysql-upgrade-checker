@@ -543,7 +543,45 @@ CREATE TABLE partitioned_csv (
   id INT NOT NULL,
   name VARCHAR(100) NOT NULL
 ) ENGINE=CSV
-PARTITION BY HASH(id) PARTITIONS 4;`
+PARTITION BY HASH(id) PARTITIONS 4;`,
+
+  // Generated column with changed function IF - should produce warning
+  generatedColumnWithIF: `
+CREATE TABLE calculated (
+  id INT PRIMARY KEY,
+  a INT,
+  b INT,
+  max_val INT GENERATED ALWAYS AS (IF(a > b, a, b)) STORED
+);`,
+
+  // Generated column with COALESCE - should produce warning
+  generatedColumnWithCoalesce: `
+CREATE TABLE defaults_table (
+  id INT PRIMARY KEY,
+  value1 INT,
+  value2 INT,
+  result INT GENERATED ALWAYS AS (COALESCE(value1, value2, 0)) VIRTUAL
+);`,
+
+  // Generated column with multiple changed functions
+  generatedColumnMultipleFuncs: `
+CREATE TABLE complex_calc (
+  id INT PRIMARY KEY,
+  a INT,
+  b INT,
+  c INT,
+  result INT GENERATED ALWAYS AS (GREATEST(LEAST(a, b), IFNULL(c, 0))) STORED
+);`,
+
+  // Generated column with normal function (no changed functions) - should NOT produce warning
+  generatedColumnNormal: `
+CREATE TABLE simple_calc (
+  id INT PRIMARY KEY,
+  a INT,
+  b INT,
+  sum_val INT GENERATED ALWAYS AS (a + b) STORED,
+  concat_val VARCHAR(100) GENERATED ALWAYS AS (CONCAT('val_', CAST(a AS CHAR))) VIRTUAL
+);`
 };
 
 // ============================================================================

@@ -18,7 +18,7 @@ import type {
   ColumnCharsetInfo
 } from './types';
 import { compatibilityRules } from './rules';
-import { REMOVED_SYS_VARS_84, SYS_VARS_NEW_DEFAULTS_84 } from './constants';
+import { REMOVED_SYS_VARS_84, SYS_VARS_NEW_DEFAULTS_84, CHANGED_FUNCTIONS_IN_GENERATED_COLUMNS } from './constants';
 import { parseCreateTable } from './parsers/table-parser';
 import { extractUsers } from './parsers/user-parser';
 
@@ -856,6 +856,48 @@ export class FileAnalyzer {
           }
         }
       }
+
+      // Check generated columns for changed functions
+      if (column.generated) {
+        this.checkGeneratedColumnFunctions(table.name, column.name, column.generated.expression, fileName);
+      }
+    }
+  }
+
+  /**
+   * Check generated column expression for changed functions
+   */
+  private checkGeneratedColumnFunctions(
+    tableName: string,
+    columnName: string,
+    expression: string,
+    fileName: string
+  ): void {
+    const foundFunctions: string[] = [];
+
+    for (const func of CHANGED_FUNCTIONS_IN_GENERATED_COLUMNS) {
+      // Match function call pattern: FUNCTION_NAME( with word boundary
+      const pattern = new RegExp(`\\b${func}\\s*\\(`, 'i');
+      if (pattern.test(expression)) {
+        foundFunctions.push(func);
+      }
+    }
+
+    if (foundFunctions.length > 0) {
+      this.addIssue({
+        id: 'generated_column_function_parsed',
+        type: 'schema',
+        category: 'invalidObjects',
+        severity: 'warning',
+        title: '생성 컬럼 함수 동작 변경',
+        description: `테이블 '${tableName}'의 생성 컬럼 '${columnName}'에서 동작이 변경된 함수가 사용됩니다: ${foundFunctions.join(', ')}. 이 함수들은 MySQL 8.4에서 결과 타입 추론 방식이 변경되었습니다.`,
+        suggestion: `CHECK TABLE \`${tableName}\` FOR UPGRADE로 검사하고 필요시 컬럼을 재생성하세요.`,
+        location: fileName,
+        tableName: tableName,
+        columnName: columnName,
+        code: `${columnName} GENERATED ALWAYS AS (${expression})`,
+        mysqlShellCheckId: 'changedFunctionsInGeneratedColumns'
+      });
     }
   }
 

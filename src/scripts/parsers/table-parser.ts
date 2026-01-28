@@ -154,13 +154,30 @@ function parseColumnDefinition(definition: string): ColumnInfo | null {
     column.collation = collateMatch[1];
   }
 
-  // Extract GENERATED column
-  const generatedMatch = definition.match(/(?:GENERATED\s+ALWAYS\s+)?AS\s+\(([^)]+)\)\s+(VIRTUAL|STORED)?/i);
-  if (generatedMatch) {
-    column.generated = {
-      expression: generatedMatch[1].trim(),
-      stored: generatedMatch[2]?.toUpperCase() === 'STORED'
-    };
+  // Extract GENERATED column - handle nested parentheses
+  const generatedStartMatch = definition.match(/(?:GENERATED\s+ALWAYS\s+)?AS\s+\(/i);
+  if (generatedStartMatch) {
+    const startIndex = generatedStartMatch.index! + generatedStartMatch[0].length;
+    let depth = 1;
+    let endIndex = startIndex;
+
+    // Find matching closing parenthesis
+    while (endIndex < definition.length && depth > 0) {
+      if (definition[endIndex] === '(') depth++;
+      if (definition[endIndex] === ')') depth--;
+      endIndex++;
+    }
+
+    if (depth === 0) {
+      const expression = definition.substring(startIndex, endIndex - 1).trim();
+      const afterExpr = definition.substring(endIndex).trim();
+      const storedMatch = afterExpr.match(/^(VIRTUAL|STORED)/i);
+
+      column.generated = {
+        expression,
+        stored: storedMatch?.[1]?.toUpperCase() === 'STORED'
+      };
+    }
   }
 
   return column;
