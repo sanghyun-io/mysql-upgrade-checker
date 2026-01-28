@@ -24,6 +24,7 @@ A comprehensive web-based static analysis tool that detects compatibility issues
 - [Report Export](#-report-export)
 - [Server Query Support](#-server-query-support)
 - [Architecture](#-architecture)
+- [Validation Process](#-validation-process)
 - [Development](#-development)
 - [Security & Privacy](#-security--privacy)
 - [Contributing](#-contributing)
@@ -347,6 +348,19 @@ Report Export (JSON/CSV/MySQL Shell)
 **2-Pass Analysis** enables cross-file validation:
 - Foreign key references are validated against actual PRIMARY KEY/UNIQUE indexes
 - ENUM element lengths are checked with specific value reporting
+
+---
+
+## 📋 Validation Process
+
+For detailed documentation on the validation process, including:
+
+- **2-Pass Analysis Architecture** - How metadata collection and cross-validation work
+- **13 Cross-Validation Patterns** - UTF-8 character validation, index size calculation, FK reference checks, and more
+- **Rule-Based Pattern Matching** - How 67 compatibility rules are applied
+- **File Type Processing** - SQL, config, TSV, and metadata file handling
+
+See the complete documentation: **[Validation Process Documentation](./docs/VALIDATION_PROCESS.md)**
 
 ---
 
