@@ -38,7 +38,7 @@ MySQL 8.0에서 8.4로 업그레이드하기 전에 호환성 문제를 감지�
 
 | 기능 | 설명 |
 |------|------|
-| **67개 호환성 규칙** | MySQL 8.4의 모든 주요 변경사항을 포괄하는 종합 검사 |
+| **77개 호환성 규칙** | MySQL 8.4의 모든 주요 변경사항을 포괄하는 종합 검사 |
 | **MySQL Shell 호환** | `util.checkForServerUpgrade()`와 동등한 검사 구현 |
 | **정적 분석** | 라이브 데이터베이스 연결 없이 덤프 파일 분석 |
 | **자동 수정 쿼리 생성** | 감지된 문제를 해결하는 실행 가능한 SQL 쿼리 생성 |
@@ -84,7 +84,7 @@ npm run build
 
 ## 🔍 호환성 검사
 
-이 도구는 MySQL 8.4의 모든 주요 변경사항을 다루는 7개 카테고리에 걸쳐 **67개의 호환성 규칙**을 구현합니다.
+이 도구는 MySQL 8.4의 모든 주요 변경사항을 다루는 7개 카테고리에 걸쳐 **77개의 호환성 규칙**을 구현합니다.
 
 ### 1. 제거된 시스템 변수
 
@@ -98,7 +98,7 @@ MySQL 8.4에서 제거되어 서버 시작 실패를 유발하는 시스템 변�
 | `relay_log_info_repository` | 제거됨 | 기본 TABLE 저장소 사용 |
 | `innodb_log_file_size` | 제거됨 | `innodb_redo_log_capacity` 사용 |
 | `transaction_write_set_extraction` | 제거됨 | 기본 활성화 |
-| + 42개 추가 변수 | 제거됨 | [전체 목록](./docs/removed-variables.md) 참조 |
+| + 44개 추가 변수 | 제거됨 | [전체 목록](./docs/removed-variables.md) 참조 |
 
 ### 2. 변경된 기본값
 
@@ -110,7 +110,12 @@ MySQL 8.4에서 제거되어 서버 시작 실패를 유발하는 시스템 변�
 | `innodb_adaptive_hash_index` | ON | OFF | 성능 튜닝 변경 |
 | `innodb_flush_method` | fsync | O_DIRECT | I/O 최적화 |
 | `innodb_io_capacity` | 200 | 10000 | SSD 최적화 기본값 |
+| `innodb_io_capacity_max` | 2000 | 20000 | 최대 I/O 용량 |
 | `innodb_change_buffering` | all | none | 변경 버퍼 단순화 |
+| `innodb_doublewrite_pages` | - | 128 | Doublewrite 페이지 수 |
+| `innodb_log_buffer_size` | 16MB | 64MB | 로그 버퍼 크기 |
+| `innodb_redo_log_capacity` | 100MB | 400MB | Redo 로그 용량 |
+| `binlog_transaction_dependency_tracking` | COMMIT_ORDER | WRITESET | 트랜잭션 의존성 추적 |
 
 ### 3. 인증 및 권한
 
@@ -336,7 +341,7 @@ FileAnalyzer.analyzeFiles()
 │  └── Pass 2.5: FK 참조 검증         │
 └─────────────────────────────────────┘
     ↓
-규칙 패턴 매칭 (67개 규칙)
+규칙 패턴 매칭 (77개 규칙)
     ↓
 이슈 생성
     ↓
@@ -357,7 +362,7 @@ UIManager.displayResults()
 
 - **2-Pass 분석 아키텍처** - 메타데이터 수집 및 교차 검증 작동 방식
 - **13개 교차 검증 패턴** - UTF-8 문자 검증, 인덱스 크기 계산, FK 참조 검사 등
-- **규칙 기반 패턴 매칭** - 67개 호환성 규칙 적용 방식
+- **규칙 기반 패턴 매칭** - 77개 호환성 규칙 적용 방식
 - **파일 유형별 처리** - SQL, 설정, TSV, 메타데이터 파일 처리
 
 전체 문서 보기: **[검증 프로세스 문서](./docs/VALIDATION_PROCESS.ko.md)**

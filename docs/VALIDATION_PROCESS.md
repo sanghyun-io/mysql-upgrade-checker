@@ -44,7 +44,7 @@ This document provides a comprehensive explanation of the validation process use
 │                                    ▼                                     │
 │  ┌───────────────────────────────────────────────────────────────────┐  │
 │  │  Pass 2: Full Analysis                                            │  │
-│  │  - Rule pattern matching (67 rules)                               │  │
+│  │  - Rule pattern matching (77 rules)                               │  │
 │  │  - Cross-file validation                                          │  │
 │  │  - Data integrity checks                                          │  │
 │  │  - INSERT data validation against schema                          │  │
@@ -79,7 +79,7 @@ This document provides a comprehensive explanation of the validation process use
 | `FileAnalyzer` | `analyzer.ts` | Main analysis engine, orchestrates 2-pass analysis |
 | `TableParser` | `parsers/table-parser.ts` | Parses CREATE TABLE statements into structured data |
 | `UserParser` | `parsers/user-parser.ts` | Parses CREATE USER and GRANT statements |
-| `CompatibilityRules` | `rules/*.ts` | 67 rules organized by category |
+| `CompatibilityRules` | `rules/*.ts` | 77 rules organized by category |
 | `Constants` | `constants.ts` | MySQL 8.4 compatibility reference data |
 
 ---

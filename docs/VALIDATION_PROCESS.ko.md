@@ -44,7 +44,7 @@ MySQL Upgrade Compatibility Checker의 검증 프로세스에 대한 상세 문�
 │                                    ▼                                     │
 │  ┌───────────────────────────────────────────────────────────────────┐  │
 │  │  Pass 2: 전체 분석                                                 │  │
-│  │  - 규칙 패턴 매칭 (67개 규칙)                                      │  │
+│  │  - 규칙 패턴 매칭 (77개 규칙)                                      │  │
 │  │  - 파일 간 교차 검증                                               │  │
 │  │  - 데이터 무결성 검사                                              │  │
 │  │  - 스키마 기반 INSERT 데이터 검증                                  │  │
@@ -79,7 +79,7 @@ MySQL Upgrade Compatibility Checker의 검증 프로세스에 대한 상세 문�
 | `FileAnalyzer` | `analyzer.ts` | 메인 분석 엔진, 2-pass 분석 조율 |
 | `TableParser` | `parsers/table-parser.ts` | CREATE TABLE 문을 구조화된 데이터로 파싱 |
 | `UserParser` | `parsers/user-parser.ts` | CREATE USER 및 GRANT 문 파싱 |
-| `CompatibilityRules` | `rules/*.ts` | 카테고리별로 구성된 67개 규칙 |
+| `CompatibilityRules` | `rules/*.ts` | 카테고리별로 구성된 77개 규칙 |
 | `Constants` | `constants.ts` | MySQL 8.4 호환성 참조 데이터 |
 
 ---

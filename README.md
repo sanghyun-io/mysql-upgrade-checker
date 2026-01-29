@@ -38,7 +38,7 @@ A comprehensive web-based static analysis tool that detects compatibility issues
 
 | Feature | Description |
 |---------|-------------|
-| **67 Compatibility Rules** | Comprehensive checks covering all major MySQL 8.4 breaking changes |
+| **77 Compatibility Rules** | Comprehensive checks covering all major MySQL 8.4 breaking changes |
 | **MySQL Shell Compatible** | Implements equivalent checks to `util.checkForServerUpgrade()` |
 | **Static Analysis** | Analyze dump files without connecting to a live database |
 | **Auto-Fix Generation** | Generate executable SQL queries to fix detected issues |
@@ -84,7 +84,7 @@ npm run build
 
 ## 🔍 Compatibility Checks
 
-This tool implements **67 compatibility rules** across 7 categories, covering all major MySQL 8.4 breaking changes.
+This tool implements **77 compatibility rules** across 7 categories, covering all major MySQL 8.4 breaking changes.
 
 ### 1. Removed System Variables
 
@@ -98,7 +98,7 @@ Detects system variables removed in MySQL 8.4 that will cause server startup fai
 | `relay_log_info_repository` | Removed | Use default TABLE storage |
 | `innodb_log_file_size` | Removed | Use `innodb_redo_log_capacity` |
 | `transaction_write_set_extraction` | Removed | Default enabled |
-| + 42 more variables | Removed | See [full list](./docs/removed-variables.md) |
+| + 44 more variables | Removed | See [full list](./docs/removed-variables.md) |
 
 ### 2. Changed Default Values
 
@@ -110,7 +110,12 @@ Identifies system variables with changed defaults that may affect application be
 | `innodb_adaptive_hash_index` | ON | OFF | Performance tuning change |
 | `innodb_flush_method` | fsync | O_DIRECT | I/O optimization |
 | `innodb_io_capacity` | 200 | 10000 | SSD-optimized default |
+| `innodb_io_capacity_max` | 2000 | 20000 | Maximum I/O capacity |
 | `innodb_change_buffering` | all | none | Simplified change buffer |
+| `innodb_doublewrite_pages` | - | 128 | Doublewrite pages count |
+| `innodb_log_buffer_size` | 16MB | 64MB | Log buffer size |
+| `innodb_redo_log_capacity` | 100MB | 400MB | Redo log capacity |
+| `binlog_transaction_dependency_tracking` | COMMIT_ORDER | WRITESET | Transaction dependency |
 
 ### 3. Authentication & Privileges
 
@@ -336,7 +341,7 @@ FileAnalyzer.analyzeFiles()
 │  └── Pass 2.5: FK validation        │
 └─────────────────────────────────────┘
       ↓
-Rule Pattern Matching (67 rules)
+Rule Pattern Matching (77 rules)
       ↓
 Issue Generation
       ↓
@@ -357,7 +362,7 @@ For detailed documentation on the validation process, including:
 
 - **2-Pass Analysis Architecture** - How metadata collection and cross-validation work
 - **13 Cross-Validation Patterns** - UTF-8 character validation, index size calculation, FK reference checks, and more
-- **Rule-Based Pattern Matching** - How 67 compatibility rules are applied
+- **Rule-Based Pattern Matching** - How 77 compatibility rules are applied
 - **File Type Processing** - SQL, config, TSV, and metadata file handling
 
 See the complete documentation: **[Validation Process Documentation](./docs/VALIDATION_PROCESS.md)**
