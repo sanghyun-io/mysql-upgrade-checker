@@ -8,7 +8,7 @@
  * Also detects column-level collation mismatches in FK join columns.
  */
 
-import type { TableInfo, Issue, ColumnInfo } from '../types';
+import type { TableInfo, Issue } from '../types';
 import type { FKGraphBuilder } from './fk-graph';
 
 /** Charset mismatch detail for an FK relationship */
@@ -61,7 +61,7 @@ function isTextColumn(type: string): boolean {
 }
 
 /** Find column info by name (case-insensitive) */
-function findColumn(table: TableInfo, columnName: string): ColumnInfo | undefined {
+function findColumn(table: TableInfo, columnName: string): TableInfo['columns'][number] | undefined {
   return table.columns.find(c => c.name.toLowerCase() === columnName.toLowerCase());
 }
 
@@ -124,7 +124,7 @@ export function analyzeCharsetCascade(
             isChildTable: true,
             hasCycle: false,
           },
-          fixQuery: generateCharsetFixSQL(childTable.name, childCol, parentTable.name, parentCol, childTable, parentTable),
+          fixQuery: generateCharsetFixSQL(childTable.name, childCol, parentTable.name, parentCol),
           mysqlShellCheckId: 'charsetMismatch',
         });
       }
@@ -172,55 +172,17 @@ function isCharsetUpgradeMismatch(charset1: string, charset2: string): boolean {
 
 function generateCharsetFixSQL(
   childTable: string,
-  childCol: string,
+  _childCol: string,
   parentTable: string,
-  parentCol: string,
-  childTableInfo?: TableInfo,
-  parentTableInfo?: TableInfo
+  _parentCol: string,
 ): string {
-  const parentColDef = buildColumnModify(parentTableInfo, parentCol);
-  const childColDef = buildColumnModify(childTableInfo, childCol);
-
   return [
-    `-- Step 1: FK 비활성화`,
-    `SET FOREIGN_KEY_CHECKS = 0;`,
-    ``,
-    `-- Step 2: 양쪽 컬럼을 utf8mb4로 변환`,
-    `ALTER TABLE \`${parentTable}\` ${parentColDef};`,
-    `ALTER TABLE \`${childTable}\` ${childColDef};`,
-    ``,
-    `-- Step 3: FK 재활성화`,
-    `SET FOREIGN_KEY_CHECKS = 1;`,
+    `-- FK 체크는 Migration Plan에서 일괄 관리됩니다.`,
+    `-- 부모 테이블 먼저 변환:`,
+    `ALTER TABLE \`${parentTable}\` CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;`,
+    `-- 자식 테이블 변환:`,
+    `ALTER TABLE \`${childTable}\` CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;`,
   ].join('\n');
-}
-
-/** Expression defaults that should NOT be quoted */
-const EXPRESSION_DEFAULT_PATTERN = /^(current_timestamp|now\(\)|curdate\(\)|curtime\(\)|uuid\(\)|null|\d+(\.\d+)?|true|false|b'[01]+')/i;
-
-/** Build MODIFY COLUMN clause preserving original type/nullability/default */
-function buildColumnModify(table: TableInfo | undefined, colName: string): string {
-  if (!table) {
-    return `MODIFY COLUMN \`${colName}\` /* 원본 타입 확인 필요 */ CHARACTER SET utf8mb4`;
-  }
-  const col = findColumn(table, colName);
-  if (!col) {
-    return `MODIFY COLUMN \`${colName}\` /* 원본 타입 확인 필요 */ CHARACTER SET utf8mb4`;
-  }
-
-  const parts = [`MODIFY COLUMN \`${colName}\` ${col.type} CHARACTER SET utf8mb4`];
-  if (!col.nullable) parts.push('NOT NULL');
-  if (col.default !== undefined) {
-    parts.push(`DEFAULT ${formatDefault(col.default)}`);
-  }
-  return parts.join(' ');
-}
-
-/** Format a column default value, distinguishing expressions from string literals */
-function formatDefault(value: string): string {
-  if (value === 'NULL' || value === 'null') return 'NULL';
-  if (EXPRESSION_DEFAULT_PATTERN.test(value.trim())) return value;
-  // String literal — escape single quotes
-  return `'${value.replace(/'/g, "''")}'`;
 }
 
 function findTableCaseInsensitive(

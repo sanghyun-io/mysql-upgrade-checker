@@ -114,14 +114,15 @@ export function buildGraphFromContext(
     }
   }
 
-  // Build charset mismatch edge set
+  // Build charset mismatch edge set — only exact FK pairs, not all related tables
   const charsetMismatchEdges = new Set<string>();
   for (const issue of issues) {
-    if (issue.id === 'fk_charset_mismatch' && issue.tableName && issue.fkContext) {
-      for (const related of issue.fkContext.relatedTables) {
-        charsetMismatchEdges.add(`${issue.tableName.toLowerCase()}->${related.toLowerCase()}`);
-        charsetMismatchEdges.add(`${related.toLowerCase()}->${issue.tableName.toLowerCase()}`);
-      }
+    if (issue.id === 'fk_charset_mismatch' && issue.fkContext && issue.fkContext.relatedTables.length >= 2) {
+      // fkContext.relatedTables[0] = child table, [1] = parent table (set in charset-cascade.ts)
+      const child = issue.fkContext.relatedTables[0].toLowerCase();
+      const parent = issue.fkContext.relatedTables[1].toLowerCase();
+      // FK edge direction: child -> parent
+      charsetMismatchEdges.add(`${child}->${parent}`);
     }
   }
 

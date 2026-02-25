@@ -7,6 +7,7 @@
  */
 
 import type { Issue, RuleCategory } from '../types';
+import { getPreflightSummary } from '../analysis/preflight';
 import type { PreflightItem } from '../analysis/preflight';
 
 // ============================================================================
@@ -149,17 +150,13 @@ function computePreflightStatus(items?: PreflightItem[]): PreflightStatus {
     };
   }
 
-  const total = items.length;
-  const completed = items.filter(i => i.status === 'passed' || i.status === 'skipped').length;
-  const requiredTotal = items.filter(i => i.required).length;
-  const requiredCompleted = items.filter(i => i.required && (i.status === 'passed' || i.status === 'skipped')).length;
-
+  const summary = getPreflightSummary(items);
   return {
-    total,
-    completed,
-    requiredTotal,
-    requiredCompleted,
-    allRequiredPassed: requiredCompleted >= requiredTotal,
+    total: summary.total,
+    completed: summary.completed,
+    requiredTotal: summary.required,
+    requiredCompleted: summary.requiredCompleted,
+    allRequiredPassed: summary.allRequiredPassed,
   };
 }
 

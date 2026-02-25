@@ -12,6 +12,7 @@ import { computeExecutionOrder } from './execution-order';
 import { generateRollbackEntry } from './rollback-generator';
 import type { RollbackEntry } from './rollback-generator';
 import type { OrderedFixGroup } from './execution-order';
+import { createPreflightChecklist } from '../analysis/preflight';
 
 // ============================================================================
 // Plan Data Types
@@ -90,49 +91,19 @@ export function generateMigrationPlan(
 // ============================================================================
 
 function generatePreflightPhase(issues: Issue[]): MigrationPhase {
-  const steps: PlanStep[] = [
-    {
-      order: 1,
-      title: '데이터베이스 백업 확인',
-      description: '마이그레이션 전 전체 데이터베이스 백업이 완료되었는지 확인합니다.',
-      type: 'check',
-      required: true,
-    },
-    {
-      order: 2,
-      title: 'MySQL 버전 확인',
-      description: '현재 MySQL 서버 버전을 확인합니다.',
-      type: 'query',
-      sql: 'SELECT VERSION();',
-      required: true,
-    },
-    {
-      order: 3,
-      title: '디스크 공간 확인',
-      description: '스키마별 데이터 크기를 확인하여 ALTER TABLE에 필요한 여유 공간을 파악합니다.',
-      type: 'query',
-      sql: [
-        'SELECT table_schema,',
-        '  ROUND(SUM(data_length + index_length) / 1024 / 1024, 2) AS size_mb',
-        'FROM information_schema.tables',
-        'GROUP BY table_schema',
-        'ORDER BY size_mb DESC;',
-      ].join('\n'),
-      required: false,
-    },
-    {
-      order: 4,
-      title: '활성 연결 확인',
-      description: '현재 활성 연결 수를 확인합니다. 마이그레이션 시 연결을 최소화하세요.',
-      type: 'query',
-      sql: 'SHOW PROCESSLIST;',
-      required: false,
-    },
-  ];
+  const checklist = createPreflightChecklist();
+  const steps: PlanStep[] = checklist.map((item, idx) => ({
+    order: idx + 1,
+    title: item.title,
+    description: item.description,
+    type: item.query ? 'query' as const : 'check' as const,
+    sql: item.query ?? undefined,
+    required: item.required,
+  }));
 
   if (issues.some(i => i.severity === 'error')) {
     steps.push({
-      order: 5,
+      order: steps.length + 1,
       title: '심각한 이슈 인지',
       description: `${issues.filter(i => i.severity === 'error').length}개의 Error 수준 이슈가 발견되었습니다. 마이그레이션 전 모두 해결해야 합니다.`,
       type: 'info',

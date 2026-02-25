@@ -11,6 +11,15 @@ import type { Issue, Severity } from '../types';
 import { REMOVED_SYS_VARS_84 } from '../constants';
 import { parseServerResult, type ServerQueryResult } from '../parsers/server-result-parser';
 
+/** Normalize a row's keys to lowercase for case-insensitive access */
+function normalizeRow(row: Record<string, unknown>): Record<string, unknown> {
+  const normalized: Record<string, unknown> = {};
+  for (const key of Object.keys(row)) {
+    normalized[key.toLowerCase()] = row[key];
+  }
+  return normalized;
+}
+
 // ============================================================================
 // Public API
 // ============================================================================
@@ -44,7 +53,9 @@ export function analyzeServerResult(rawText: string): Issue[] {
   }
 
   // SHOW VARIABLES result
-  if (colNames.includes('variable_name') && colNames.includes('variable_value')) {
+  // Accepts both VARIABLE_NAME/VARIABLE_VALUE (performance_schema format)
+  // and Variable_name/Value (SHOW VARIABLES output format)
+  if (colNames.includes('variable_name') && (colNames.includes('variable_value') || colNames.includes('value'))) {
     return analyzeVariablesResult(parsed);
   }
 
@@ -155,8 +166,9 @@ function analyzeVariablesResult(result: ServerQueryResult): Issue[] {
   const issues: Issue[] = [];
 
   for (const row of result.rows) {
-    const varName = String(row['VARIABLE_NAME'] ?? row['Variable_name'] ?? '').toLowerCase();
-    const varValue = String(row['VARIABLE_VALUE'] ?? row['Value'] ?? '');
+    const nrow = normalizeRow(row);
+    const varName = String(nrow['variable_name'] ?? '').toLowerCase();
+    const varValue = String(nrow['variable_value'] ?? nrow['value'] ?? '');
 
     // Check against removed variables
     if ((REMOVED_SYS_VARS_84 as readonly string[]).includes(varName)) {
@@ -224,9 +236,10 @@ function analyzeProcesslistResult(result: ServerQueryResult): Issue[] {
   const issues: Issue[] = [];
 
   const longRunning = result.rows.filter(row => {
-    const time = Number(row['Time'] ?? row['time'] ?? 0);
-    const command = String(row['Command'] ?? row['command'] ?? '');
-    return time > 300 && command !== 'Sleep' && command !== 'Daemon';
+    const nrow = normalizeRow(row);
+    const time = Number(nrow['time'] ?? 0);
+    const command = String(nrow['command'] ?? '').toLowerCase();
+    return time > 300 && command !== 'sleep' && command !== 'daemon';
   });
 
   if (longRunning.length > 0) {
@@ -240,8 +253,9 @@ function analyzeProcesslistResult(result: ServerQueryResult): Issue[] {
   }
 
   const activeConnections = result.rows.filter(row => {
-    const command = String(row['Command'] ?? row['command'] ?? '');
-    return command !== 'Sleep' && command !== 'Daemon';
+    const nrow = normalizeRow(row);
+    const command = String(nrow['command'] ?? '').toLowerCase();
+    return command !== 'sleep' && command !== 'daemon';
   });
 
   if (activeConnections.length > 20) {
@@ -261,16 +275,19 @@ function analyzeTableSizeResult(result: ServerQueryResult): Issue[] {
   const issues: Issue[] = [];
   const sizeCol = result.columns.find(c => c.toLowerCase().includes('size'));
   if (!sizeCol) return issues;
+  const sizeKey = sizeCol.toLowerCase();
 
   const largeSchemas = result.rows.filter(row => {
-    const size = Number(row[sizeCol] ?? 0);
+    const nrow = normalizeRow(row);
+    const size = Number(nrow[sizeKey] ?? 0);
     return size > 1024; // > 1GB
   });
 
   if (largeSchemas.length > 0) {
-    const details = largeSchemas.map(row =>
-      `${row['table_schema']}: ${row[sizeCol]}MB`
-    ).join(', ');
+    const details = largeSchemas.map(row => {
+      const nrow = normalizeRow(row);
+      return `${nrow['table_schema']}: ${nrow[sizeKey]}MB`;
+    }).join(', ');
 
     issues.push(makeIssue(
       'server_large_schemas',

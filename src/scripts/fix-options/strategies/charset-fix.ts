@@ -32,35 +32,38 @@ export function generateCharsetFixOptions(issue: Issue): FixOption[] {
     });
   } else {
     // FK cascade mode: convert all related tables (FK checks managed by plan generator)
+    const uniqueRelatedCascade = [...new Set(relatedTables.filter(t => t.toLowerCase() !== table.toLowerCase()))];
     const fkCascadeSQL = [
       `-- FK 체크는 Migration Plan에서 일괄 관리됩니다.`,
-      ...relatedTables.map(t => `ALTER TABLE \`${t}\` CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;`),
+      ...uniqueRelatedCascade.map(t => `ALTER TABLE \`${t}\` CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;`),
       `ALTER TABLE \`${table}\` CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;`,
     ].join('\n');
 
     options.push({
       strategy: 'collation_fk_cascade',
       label: 'FK 관련 테이블 일괄 변환',
-      description: `FK 체크를 비활성화하고 관련 테이블(${relatedTables.length}개)을 모두 utf8mb4로 변환합니다.`,
+      description: `FK 체크를 비활성화하고 관련 테이블(${uniqueRelatedCascade.length}개)을 모두 utf8mb4로 변환합니다.`,
       sqlTemplate: fkCascadeSQL,
       isRecommended: false,
       effort: 'medium',
       risk: 'medium',
-      impact: `${relatedTables.length}개 관련 테이블 영향. 대용량 테이블의 경우 시간 소요.`,
+      impact: `${uniqueRelatedCascade.length}개 관련 테이블 영향. 대용량 테이블의 경우 시간 소요.`,
       reversibility: 'partially_reversible',
       rollbackTemplate: null,
     });
 
-    // FK safe mode: convert in topological order (executable ALTER statements)
+    // FK safe mode: use Migration Plan for correct topological ordering
+    const uniqueRelated = [...new Set(relatedTables.filter(t => t.toLowerCase() !== table.toLowerCase()))];
     options.push({
       strategy: 'collation_fk_safe',
       label: 'FK 안전 순서로 변환',
-      description: `FK 의존성 순서를 따라 한 테이블씩 순서대로 변환합니다. 가장 안전하지만 느립니다.`,
+      description: `Migration Plan의 위상 정렬 순서에 따라 한 테이블씩 순서대로 변환합니다. 가장 안전하지만 느립니다.`,
       sqlTemplate: [
-        `-- FK 의존성 순서로 변환 (부모 테이블 먼저):`,
-        ...relatedTables.map((t, i) => `-- Step ${i + 1}:\nALTER TABLE \`${t}\` CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;`),
-        `-- 마지막:\nALTER TABLE \`${table}\` CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;`,
-      ].join('\n\n'),
+        `-- ⚠️ 실제 실행 순서는 Migration Plan의 FK 위상 정렬을 따르세요.`,
+        `-- 아래는 변환 대상 테이블 목록입니다:`,
+        ...uniqueRelated.map(t => `ALTER TABLE \`${t}\` CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;`),
+        `ALTER TABLE \`${table}\` CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;`,
+      ].join('\n'),
       isRecommended: false,
       effort: 'high',
       risk: 'low',

@@ -242,7 +242,8 @@ describe('analyzeCharsetCascade', () => {
 
     const issues = analyzeCharsetCascade(tables, graph);
     expect(issues[0].fixQuery).toBeDefined();
-    expect(issues[0].fixQuery).toContain('FOREIGN_KEY_CHECKS');
+    // FK checks are centralized in plan, not in per-issue fix SQL
+    expect(issues[0].fixQuery).not.toContain('FOREIGN_KEY_CHECKS');
     expect(issues[0].fixQuery).toContain('utf8mb4');
   });
 
@@ -318,7 +319,7 @@ describe('analyzeCharsetCascade', () => {
     expect(charsetIssues.length).toBe(0);
   });
 
-  it('should preserve original column type in fix SQL (not force VARCHAR(255))', () => {
+  it('should use table-level CONVERT TO in fix SQL (safe DDL without column reconstruction)', () => {
     const tables = new Map<string, TableInfo>();
     tables.set('parent', makeTable('parent', {
       charset: 'utf8mb4',
@@ -340,14 +341,17 @@ describe('analyzeCharsetCascade', () => {
     const charsetIssues = issues.filter(i => i.id === 'fk_charset_mismatch');
     expect(charsetIssues.length).toBe(1);
     expect(charsetIssues[0].fixQuery).toBeDefined();
-    // Should contain original type CHAR(10), not VARCHAR(255)
-    expect(charsetIssues[0].fixQuery).toContain('CHAR(10)');
-    expect(charsetIssues[0].fixQuery).not.toContain('VARCHAR(255)');
-    // Should preserve NOT NULL
-    expect(charsetIssues[0].fixQuery).toContain('NOT NULL');
+    // Should use table-level CONVERT TO (not column-level MODIFY COLUMN)
+    expect(charsetIssues[0].fixQuery).toContain('CONVERT TO CHARACTER SET utf8mb4');
+    // Should not contain FOREIGN_KEY_CHECKS (centralized in plan)
+    expect(charsetIssues[0].fixQuery).not.toContain('FOREIGN_KEY_CHECKS');
+    // Should reference both tables
+    expect(charsetIssues[0].fixQuery).toContain('parent');
+    expect(charsetIssues[0].fixQuery).toContain('child');
   });
 
-  it('should preserve CURRENT_TIMESTAMP expression default in fix SQL (no quoting)', () => {
+  it('should generate fix SQL that preserves all column attributes via CONVERT TO', () => {
+    // CONVERT TO CHARACTER SET preserves ON UPDATE, defaults, generated cols automatically
     const tables = new Map<string, TableInfo>();
     tables.set('parent', makeTable('parent', {
       charset: 'utf8mb4',
@@ -369,60 +373,9 @@ describe('analyzeCharsetCascade', () => {
     const charsetIssues = issues.filter(i => i.id === 'fk_charset_mismatch');
     expect(charsetIssues.length).toBe(1);
     expect(charsetIssues[0].fixQuery).toBeDefined();
-    // Expression default should NOT be quoted
-    expect(charsetIssues[0].fixQuery).toContain('DEFAULT CURRENT_TIMESTAMP');
-    expect(charsetIssues[0].fixQuery).not.toContain("DEFAULT 'CURRENT_TIMESTAMP'");
-  });
-
-  it('should properly quote string literal defaults in fix SQL', () => {
-    const tables = new Map<string, TableInfo>();
-    tables.set('parent', makeTable('parent', {
-      charset: 'utf8mb4',
-      columns: [{ name: 'id', type: 'VARCHAR(50)', nullable: false, charset: 'utf8mb4' }],
-    }));
-    tables.set('child', makeTable('child', {
-      charset: 'utf8mb3',
-      columns: [
-        { name: 'id', type: 'INT', nullable: false },
-        { name: 'parent_id', type: 'VARCHAR(50)', nullable: true, charset: 'utf8mb3', default: 'unknown' },
-      ],
-      fks: [{ name: 'fk_child', columns: ['parent_id'], refTable: 'parent', refColumns: ['id'] }],
-    }));
-
-    const graph = new FKGraphBuilder();
-    graph.buildFromTableInfos(tables);
-
-    const issues = analyzeCharsetCascade(tables, graph);
-    const charsetIssues = issues.filter(i => i.id === 'fk_charset_mismatch');
-    expect(charsetIssues.length).toBe(1);
-    // String literal should be quoted
-    expect(charsetIssues[0].fixQuery).toContain("DEFAULT 'unknown'");
-  });
-
-  it('should handle numeric default without quoting', () => {
-    const tables = new Map<string, TableInfo>();
-    tables.set('parent', makeTable('parent', {
-      charset: 'utf8mb4',
-      columns: [{ name: 'id', type: 'VARCHAR(50)', nullable: false, charset: 'utf8mb4' }],
-    }));
-    tables.set('child', makeTable('child', {
-      charset: 'utf8mb3',
-      columns: [
-        { name: 'id', type: 'INT', nullable: false },
-        { name: 'parent_id', type: 'VARCHAR(50)', nullable: true, charset: 'utf8mb3', default: '0' },
-      ],
-      fks: [{ name: 'fk_child', columns: ['parent_id'], refTable: 'parent', refColumns: ['id'] }],
-    }));
-
-    const graph = new FKGraphBuilder();
-    graph.buildFromTableInfos(tables);
-
-    const issues = analyzeCharsetCascade(tables, graph);
-    const charsetIssues = issues.filter(i => i.id === 'fk_charset_mismatch');
-    expect(charsetIssues.length).toBe(1);
-    // Numeric default should NOT be quoted
-    expect(charsetIssues[0].fixQuery).toContain('DEFAULT 0');
-    expect(charsetIssues[0].fixQuery).not.toContain("DEFAULT '0'");
+    // Uses safe CONVERT TO (MySQL handles column attributes internally)
+    expect(charsetIssues[0].fixQuery).toContain('ALTER TABLE');
+    expect(charsetIssues[0].fixQuery).toContain('CONVERT TO CHARACTER SET utf8mb4');
   });
 
   it('should treat latin1 vs utf8mb4 as warning (not Error 3780)', () => {

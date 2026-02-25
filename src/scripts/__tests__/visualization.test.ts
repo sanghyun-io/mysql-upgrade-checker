@@ -366,7 +366,7 @@ describe('buildGraphFromContext', () => {
         id: 'fk_charset_mismatch',
         tableName: 'orders',
         severity: 'error',
-        fkContext: { relatedTables: ['users'], isChildTable: true },
+        fkContext: { relatedTables: ['orders', 'users'], isChildTable: true },
       }),
     ];
 

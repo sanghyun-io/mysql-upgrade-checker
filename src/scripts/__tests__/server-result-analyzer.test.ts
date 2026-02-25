@@ -338,3 +338,64 @@ describe('getPreflightSummary', () => {
     expect(summary.allRequiredPassed).toBe(true);
   });
 });
+
+// ============================================================================
+// Case-insensitive row key handling
+// ============================================================================
+
+describe('case-insensitive row key handling', () => {
+  it('should handle UPPERCASE column names in SHOW VARIABLES result', () => {
+    const tsv = 'VARIABLE_NAME\tVARIABLE_VALUE\ninnodb_stats_persistent\tON';
+    const issues = analyzeServerResult(tsv);
+    // Should parse without error (innodb_stats_persistent is not removed, so no error issue)
+    expect(issues.every(i => i.id !== 'server_result_parse_error')).toBe(true);
+  });
+
+  it('should handle lowercase column names in SHOW VARIABLES result', () => {
+    const tsv = 'variable_name\tvariable_value\ninnodb_stats_persistent\tON';
+    const issues = analyzeServerResult(tsv);
+    expect(issues.every(i => i.id !== 'server_result_parse_error')).toBe(true);
+  });
+
+  it('should handle mixed-case column names in SHOW VARIABLES result', () => {
+    const tsv = 'Variable_name\tValue\ninnodb_stats_persistent\tON';
+    const issues = analyzeServerResult(tsv);
+    expect(issues.every(i => i.id !== 'server_result_parse_error')).toBe(true);
+  });
+
+  it('should detect removed variable regardless of key casing', () => {
+    // Use a removed variable from REMOVED_SYS_VARS_84
+    const tsvUpper = 'VARIABLE_NAME\tVARIABLE_VALUE\navoid_temporal_upgrade\tOFF';
+    const tsvLower = 'variable_name\tvariable_value\navoid_temporal_upgrade\tOFF';
+    const tsvMixed = 'Variable_name\tValue\navoid_temporal_upgrade\tOFF';
+
+    const issuesUpper = analyzeServerResult(tsvUpper);
+    const issuesLower = analyzeServerResult(tsvLower);
+    const issuesMixed = analyzeServerResult(tsvMixed);
+
+    // All three should detect the removed variable
+    expect(issuesUpper.some(i => i.id === 'server_removed_variable')).toBe(true);
+    expect(issuesLower.some(i => i.id === 'server_removed_variable')).toBe(true);
+    expect(issuesMixed.some(i => i.id === 'server_removed_variable')).toBe(true);
+  });
+
+  it('should handle UPPERCASE command names in SHOW PROCESSLIST', () => {
+    const tsv = 'Id\tCommand\tTime\tState\tInfo\n1\tSLEEP\t100\twaiting\tNULL\n2\tQUERY\t600\texecuting\tSELECT 1';
+    const issues = analyzeServerResult(tsv);
+    // Should detect the long-running query (600 > 300 and command != sleep)
+    expect(issues.some(i => i.id === 'server_long_running_queries')).toBe(true);
+  });
+
+  it('should handle lowercase command names in SHOW PROCESSLIST', () => {
+    const tsv = 'id\tcommand\ttime\tstate\tinfo\n1\tsleep\t100\twaiting\tnull\n2\tquery\t600\texecuting\tselect 1';
+    const issues = analyzeServerResult(tsv);
+    expect(issues.some(i => i.id === 'server_long_running_queries')).toBe(true);
+  });
+
+  it('should handle empty/null cells gracefully', () => {
+    const tsv = 'variable_name\tvariable_value\n\t\nsome_var\t';
+    const issues = analyzeServerResult(tsv);
+    // Should not crash
+    expect(Array.isArray(issues)).toBe(true);
+  });
+});

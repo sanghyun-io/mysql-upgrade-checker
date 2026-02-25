@@ -1981,6 +1981,27 @@ export class FileAnalyzer {
         });
       }
     }
+
+    // Emit issues for self-referencing FK tables
+    const selfRefTables = this.fkGraph.getSelfRefTables();
+    for (const tableName of selfRefTables) {
+      this.addIssue({
+        id: 'fk_self_reference',
+        type: 'schema',
+        category: 'invalidObjects',
+        severity: 'info',
+        title: 'FK 자기 참조 감지',
+        description: `테이블 '${tableName}'이(가) 자기 자신을 참조하는 FK를 가지고 있습니다. ALTER TABLE 시 FK를 일시 비활성화해야 합니다.`,
+        suggestion: 'SET FOREIGN_KEY_CHECKS = 0; 으로 FK를 비활성화한 후 ALTER TABLE을 실행하세요.',
+        location: 'FK Graph Analysis',
+        tableName: tableName,
+        fkContext: {
+          relatedTables: [tableName],
+          isChildTable: true,
+          hasCycle: true,
+        },
+      });
+    }
   }
 
   // ==========================================================================
@@ -2005,6 +2026,44 @@ export class FileAnalyzer {
    * Enrich existing issues with FK context and column context.
    */
   private enrichIssuesWithContext(): void {
+    // Precompute graph data once (Issue #5 fix: avoid repeated traversals)
+    const sccs = this.fkGraph.getSCCs();
+    const selfRefTables = this.fkGraph.getSelfRefTables();
+    const missingTables = this.fkGraph.getMissingTables();
+
+    // Build per-table cycle membership set
+    const cycleMembers = new Set<string>();
+    for (const scc of sccs) {
+      if (scc.length > 1) {
+        for (const t of scc) cycleMembers.add(t);
+      }
+    }
+    for (const t of selfRefTables) cycleMembers.add(t);
+
+    // Cache per-table context to avoid redundant BFS calls
+    const tableContextCache = new Map<string, {
+      relatedTables: string[];
+      isChild: boolean;
+      inCycle: boolean;
+      hasMissingRef: boolean;
+    }>();
+
+    const getTableContext = (tableName: string) => {
+      if (tableContextCache.has(tableName)) return tableContextCache.get(tableName)!;
+
+      const relatedTables = this.fkGraph.getRelatedTables(tableName);
+      const isChild = this.fkGraph.getParents(tableName).size > 0;
+      const inCycle = cycleMembers.has(tableName);
+      const tableInfo = this.tableInfoMap.get(tableName);
+      const hasMissingRef = tableInfo?.foreignKeys.some(
+        fk => missingTables.has(fk.refTable.toLowerCase())
+      ) ?? false;
+
+      const ctx = { relatedTables: [...relatedTables], isChild, inCycle, hasMissingRef };
+      tableContextCache.set(tableName, ctx);
+      return ctx;
+    };
+
     for (const issue of this.results.issues) {
       // Skip issues that already have context (e.g., charset cascade issues)
       if (issue.fkContext || issue.columnContext) continue;
@@ -2014,27 +2073,12 @@ export class FileAnalyzer {
 
       // Add FK context if the table has FK relationships
       if (this.fkGraph.hasRelationships(tableName)) {
-        const relatedTables = this.fkGraph.getRelatedTables(tableName);
-        const isChild = this.fkGraph.getParents(tableName).size > 0;
-
-        // Check if this table is part of a cycle (SCC > 1 or self-referencing)
-        const sccs = this.fkGraph.getSCCs();
-        const selfRefTables = this.fkGraph.getSelfRefTables();
-        const inCycle = sccs.some(scc => scc.length > 1 && scc.includes(tableName)) ||
-          selfRefTables.has(tableName);
-
-        // Check if this table's FKs reference any missing tables
-        const missingTables = this.fkGraph.getMissingTables();
-        const tableInfo = this.tableInfoMap.get(tableName);
-        const hasMissingRef = tableInfo?.foreignKeys.some(
-          fk => missingTables.has(fk.refTable.toLowerCase())
-        ) ?? false;
-
+        const ctx = getTableContext(tableName);
         issue.fkContext = {
-          relatedTables: [...relatedTables],
-          isChildTable: isChild,
-          hasCycle: inCycle || undefined,
-          missingReference: hasMissingRef || undefined,
+          relatedTables: ctx.relatedTables,
+          isChildTable: ctx.isChild,
+          hasCycle: ctx.inCycle || undefined,
+          missingReference: ctx.hasMissingRef || undefined,
         };
       }
 
