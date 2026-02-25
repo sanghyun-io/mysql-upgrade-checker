@@ -31,14 +31,11 @@ export function generateCharsetFixOptions(issue: Issue): FixOption[] {
       rollbackTemplate: `ALTER TABLE \`${table}\` CONVERT TO CHARACTER SET utf8mb3;`,
     });
   } else {
-    // FK cascade mode: disable FK checks, convert all related tables
+    // FK cascade mode: convert all related tables (FK checks managed by plan generator)
     const fkCascadeSQL = [
-      `SET FOREIGN_KEY_CHECKS = 0;`,
-      ``,
+      `-- FK 체크는 Migration Plan에서 일괄 관리됩니다.`,
       ...relatedTables.map(t => `ALTER TABLE \`${t}\` CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;`),
       `ALTER TABLE \`${table}\` CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;`,
-      ``,
-      `SET FOREIGN_KEY_CHECKS = 1;`,
     ].join('\n');
 
     options.push({
@@ -54,16 +51,16 @@ export function generateCharsetFixOptions(issue: Issue): FixOption[] {
       rollbackTemplate: null,
     });
 
-    // FK safe mode: convert in topological order
+    // FK safe mode: convert in topological order (executable ALTER statements)
     options.push({
       strategy: 'collation_fk_safe',
       label: 'FK 안전 순서로 변환',
       description: `FK 의존성 순서를 따라 한 테이블씩 순서대로 변환합니다. 가장 안전하지만 느립니다.`,
       sqlTemplate: [
         `-- FK 의존성 순서로 변환 (부모 테이블 먼저):`,
-        ...relatedTables.map((t, i) => `-- Step ${i + 1}: ALTER TABLE \`${t}\` CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;`),
-        `-- 마지막: ALTER TABLE \`${table}\` CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;`,
-      ].join('\n'),
+        ...relatedTables.map((t, i) => `-- Step ${i + 1}:\nALTER TABLE \`${t}\` CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;`),
+        `-- 마지막:\nALTER TABLE \`${table}\` CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;`,
+      ].join('\n\n'),
       isRecommended: false,
       effort: 'high',
       risk: 'low',

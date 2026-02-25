@@ -112,9 +112,10 @@ export class FKGraphBuilder implements IFKGraphBuilder {
     const key = table.toLowerCase();
     const visited = new Set<string>();
     const queue: string[] = [key];
+    let idx = 0;
 
-    while (queue.length > 0) {
-      const current = queue.shift()!;
+    while (idx < queue.length) {
+      const current = queue[idx++];
       if (visited.has(current)) continue;
       visited.add(current);
 
@@ -262,7 +263,7 @@ export class FKGraphBuilder implements IFKGraphBuilder {
       }
     }
 
-    // Kahn's algorithm
+    // Kahn's algorithm (index-based queue for O(n) BFS)
     const queue: string[] = [];
     for (const [node, deg] of inDegree) {
       if (deg === 0) queue.push(node);
@@ -270,9 +271,10 @@ export class FKGraphBuilder implements IFKGraphBuilder {
 
     const result: string[] = [];
     const visited = new Set<string>();
+    let qIdx = 0;
 
-    while (queue.length > 0) {
-      const node = queue.shift()!;
+    while (qIdx < queue.length) {
+      const node = queue[qIdx++];
       if (visited.has(node)) continue;
       visited.add(node);
       result.push(node);

@@ -105,7 +105,8 @@ describe('generateFixOptions', () => {
       const options = generateFixOptions(issue);
       const cascadeOpt = options.find(o => o.strategy === 'collation_fk_cascade');
       expect(cascadeOpt?.sqlTemplate).toContain('users');
-      expect(cascadeOpt?.sqlTemplate).toContain('FOREIGN_KEY_CHECKS');
+      // FK_CHECKS is centralized in Migration Plan, not per-strategy SQL
+      expect(cascadeOpt?.sqlTemplate).toContain('ALTER TABLE');
     });
   });
 
@@ -249,6 +250,31 @@ describe('applyRecommendation', () => {
     expect(recommended?.strategy).toBe('collation_fk_safe');
   });
 
+  it('should have executable SQL (not comment-only) for all recommended options', () => {
+    const testCases = [
+      makeIssue({ id: 'invalid_date_zero', tableName: 't', columnName: 'c', columnContext: { nullable: true, hasDefault: false } }),
+      makeIssue({ id: 'utf8_charset', tableName: 't' }),
+      makeIssue({ id: 'utf8_charset', tableName: 't', fkContext: { relatedTables: ['p'], isChildTable: true } }),
+      makeIssue({ id: 'myisam_engine', tableName: 't', matchedText: 'MyISAM' }),
+      makeIssue({ id: 'reserved_keyword_table_parsed', tableName: 'RANK' }),
+      makeIssue({ id: 'mysql_native_password', userName: 'u' }),
+    ];
+
+    for (const issue of testCases) {
+      const options = generateFixOptions(issue);
+      const recommended = options.find(o => o.isRecommended);
+      if (recommended?.sqlTemplate) {
+        // Verify recommended SQL contains at least one DDL/DML keyword, not just comments
+        const sqlWithoutComments = recommended.sqlTemplate
+          .split('\n')
+          .filter(line => !line.trim().startsWith('--'))
+          .join('\n')
+          .trim();
+        expect(sqlWithoutComments.length, `Issue ${issue.id}: recommended SQL should have executable statements`).toBeGreaterThan(0);
+      }
+    }
+  });
+
   it('should recommend engine_convert for MyISAM', () => {
     const issue = makeIssue({ id: 'myisam_engine', tableName: 'legacy', matchedText: 'MyISAM' });
     const options = generateFixOptions(issue);
@@ -256,14 +282,14 @@ describe('applyRecommendation', () => {
     expect(recommended?.strategy).toBe('engine_convert');
   });
 
-  it('should recommend backtick_quote for reserved keywords', () => {
+  it('should recommend rename for reserved keywords', () => {
     const issue = makeIssue({
       id: 'reserved_keyword_table_parsed',
       tableName: 'RANK',
     });
     const options = generateFixOptions(issue);
     const recommended = options.find(o => o.isRecommended);
-    expect(recommended?.strategy).toBe('backtick_quote');
+    expect(recommended?.strategy).toBe('rename');
   });
 
   it('should recommend auth_change for mysql_native_password', () => {

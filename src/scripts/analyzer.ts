@@ -2017,17 +2017,24 @@ export class FileAnalyzer {
         const relatedTables = this.fkGraph.getRelatedTables(tableName);
         const isChild = this.fkGraph.getParents(tableName).size > 0;
 
-        // Check if this table is part of a cycle
+        // Check if this table is part of a cycle (SCC > 1 or self-referencing)
         const sccs = this.fkGraph.getSCCs();
-        const inCycle = sccs.some(scc => scc.length > 1 && scc.includes(tableName));
+        const selfRefTables = this.fkGraph.getSelfRefTables();
+        const inCycle = sccs.some(scc => scc.length > 1 && scc.includes(tableName)) ||
+          selfRefTables.has(tableName);
+
+        // Check if this table's FKs reference any missing tables
+        const missingTables = this.fkGraph.getMissingTables();
+        const tableInfo = this.tableInfoMap.get(tableName);
+        const hasMissingRef = tableInfo?.foreignKeys.some(
+          fk => missingTables.has(fk.refTable.toLowerCase())
+        ) ?? false;
 
         issue.fkContext = {
           relatedTables: [...relatedTables],
           isChildTable: isChild,
           hasCycle: inCycle || undefined,
-          missingReference: [...this.fkGraph.getMissingTables()].some(mt =>
-            this.fkGraph.getParents(tableName).has(mt)
-          ) || undefined,
+          missingReference: hasMissingRef || undefined,
         };
       }
 

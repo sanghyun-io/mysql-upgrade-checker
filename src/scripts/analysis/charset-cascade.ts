@@ -194,6 +194,9 @@ function generateCharsetFixSQL(
   ].join('\n');
 }
 
+/** Expression defaults that should NOT be quoted */
+const EXPRESSION_DEFAULT_PATTERN = /^(current_timestamp|now\(\)|curdate\(\)|curtime\(\)|uuid\(\)|null|\d+(\.\d+)?|true|false|b'[01]+')/i;
+
 /** Build MODIFY COLUMN clause preserving original type/nullability/default */
 function buildColumnModify(table: TableInfo | undefined, colName: string): string {
   if (!table) {
@@ -207,9 +210,17 @@ function buildColumnModify(table: TableInfo | undefined, colName: string): strin
   const parts = [`MODIFY COLUMN \`${colName}\` ${col.type} CHARACTER SET utf8mb4`];
   if (!col.nullable) parts.push('NOT NULL');
   if (col.default !== undefined) {
-    parts.push(`DEFAULT ${col.default === 'NULL' ? 'NULL' : `'${col.default}'`}`);
+    parts.push(`DEFAULT ${formatDefault(col.default)}`);
   }
   return parts.join(' ');
+}
+
+/** Format a column default value, distinguishing expressions from string literals */
+function formatDefault(value: string): string {
+  if (value === 'NULL' || value === 'null') return 'NULL';
+  if (EXPRESSION_DEFAULT_PATTERN.test(value.trim())) return value;
+  // String literal — escape single quotes
+  return `'${value.replace(/'/g, "''")}'`;
 }
 
 function findTableCaseInsensitive(

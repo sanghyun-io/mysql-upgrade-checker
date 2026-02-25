@@ -47,12 +47,17 @@ export function computeExecutionOrder(
     const allTables = new Set(byTable.keys());
     orderedTables = fkGraph.getTopologicalOrder(allTables);
 
-    // Identify cycle members
+    // Identify cycle members (SCCs with size > 1 OR self-referencing tables)
     const sccs = fkGraph.getSCCs();
     for (const scc of sccs) {
       if (scc.length > 1) {
         for (const t of scc) cycleMembers.add(t);
       }
+    }
+    // Self-referencing tables are also cycle members
+    const selfRefTables = fkGraph.getSelfRefTables?.();
+    if (selfRefTables) {
+      for (const t of selfRefTables) cycleMembers.add(t);
     }
 
     // Add tables not in FK graph (no relationships) - O(n) with Set

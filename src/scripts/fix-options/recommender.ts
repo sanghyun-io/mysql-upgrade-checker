@@ -72,8 +72,8 @@ function selectRecommendedIndex(issue: Issue, options: FixOption[]): number {
 
   // === Reserved Keywords ===
   if (issueId === 'reserved_keyword_table_parsed' || issueId === 'reserved_keyword_column_parsed') {
-    // Recommend backtick quoting (less effort, lower risk)
-    return options.findIndex(o => o.strategy === 'backtick_quote');
+    // Recommend rename (executable DDL). Backtick quoting is a coding guideline, not a DDL fix.
+    return options.findIndex(o => o.strategy === 'rename');
   }
 
   // Default: recommend first option

@@ -32,6 +32,10 @@ export interface IFKGraphBuilder {
   hasCycle(): boolean;
   getSCCs(): string[][];
   getAllEdges(): ReadonlyArray<IFKEdge>;
+  /** Get tables with self-referencing FKs */
+  getSelfRefTables?(): ReadonlySet<string>;
+  /** Get tables referenced by FKs but not present in the dump */
+  getMissingTables?(): ReadonlySet<string>;
 }
 
 /**
