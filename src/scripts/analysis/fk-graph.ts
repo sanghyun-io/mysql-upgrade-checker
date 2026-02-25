@@ -7,7 +7,8 @@
  * - Tarjan's algorithm for strongly connected components (cycle detection)
  * - Topological sort via Kahn's algorithm with alphabetical tie-breaking.
  *   Cycle nodes (SCCs with >1 member or self-referencing tables) are appended
- *   at the end, grouped by SCC and sorted alphabetically within each SCC group.
+ *   at the end using a condensation-graph sort: SCCs are topologically ordered
+ *   by inter-SCC dependencies, and tables within each SCC are sorted alphabetically.
  * - Self-referencing FK handling
  * - Missing reference detection
  */
@@ -281,10 +282,15 @@ export class FKGraphBuilder implements IFKGraphBuilder {
    * sorted alphabetically so that the output is deterministic regardless of
    * Map/Set insertion order.
    *
-   * Cycle nodes (tables involved in circular FK dependencies) cannot be
-   * topologically ordered and are appended at the end. They are grouped by
-   * SCC and sorted alphabetically within each SCC group. SCCs themselves
-   * are ordered alphabetically by their smallest member.
+   * Cycle nodes (tables involved in circular FK dependencies) cannot be fully
+   * topologically ordered within their SCC. After Kahn's acyclic portion:
+   * 1. Collect SCCs from the remaining (unvisited) cycle nodes.
+   * 2. Build a condensation DAG of those SCC groups using the edges between
+   *    different SCCs in the filtered subgraph (inter-SCC dependencies).
+   * 3. Topologically sort the condensation DAG (Kahn's on SCC nodes),
+   *    so that if SCC-A has an edge into SCC-B, SCC-A is emitted before SCC-B.
+   * 4. Within each SCC, tables are sorted alphabetically (no valid ordering
+   *    exists inside a cycle, so alphabetical gives a deterministic result).
    */
   getTopologicalOrder(tables: Set<string>): string[] {
     const tableKeys = new Set<string>();
@@ -352,15 +358,16 @@ export class FKGraphBuilder implements IFKGraphBuilder {
     }
 
     // Handle remaining nodes (part of cycles).
-    // Group them by SCC and sort alphabetically within each SCC group.
-    // SCCs are ordered alphabetically by their smallest (first-sorted) member.
+    // Build a condensation graph of SCC groups and topologically sort it so
+    // that inter-SCC dependencies are respected. Within each SCC, tables are
+    // sorted alphabetically since no valid ordering exists inside a cycle.
     const cycleNodes = new Set<string>();
     for (const t of tableKeys) {
       if (!visited.has(t)) cycleNodes.add(t);
     }
 
     if (cycleNodes.size > 0) {
-      // Get SCCs that contain cycle nodes in the filtered subgraph
+      // Step 1: Collect SCC groups from the unvisited (cycle) nodes.
       const allSCCs = this.getSCCs();
       const sccGroups: string[][] = [];
 
@@ -372,23 +379,101 @@ export class FKGraphBuilder implements IFKGraphBuilder {
         }
       }
 
-      // Sort SCC groups by their alphabetically smallest member
-      sccGroups.sort((a, b) => a[0].localeCompare(b[0]));
-
-      // Track which cycle nodes we have assigned to an SCC group
-      const assignedNodes = new Set<string>();
+      // Any cycle nodes not captured by any SCC group (e.g. isolated self-refs
+      // that getSCCs() may not include) get their own single-node SCC group.
+      const assignedByScc = new Set<string>();
       for (const group of sccGroups) {
-        for (const t of group) {
-          assignedNodes.add(t);
-          result.push(t);
+        for (const t of group) assignedByScc.add(t);
+      }
+      for (const t of [...cycleNodes].sort()) {
+        if (!assignedByScc.has(t)) {
+          sccGroups.push([t]);
         }
       }
 
-      // Any remaining cycle nodes not captured by SCCs (e.g. isolated self-refs
-      // that getSCCs() may not include) are appended alphabetically
-      const remaining = [...cycleNodes].filter(t => !assignedNodes.has(t)).sort();
-      for (const t of remaining) {
-        result.push(t);
+      // Step 2: Build a condensation DAG.
+      // Map each table to its SCC index for fast lookup.
+      const tableToSccIndex = new Map<string, number>();
+      for (let i = 0; i < sccGroups.length; i++) {
+        for (const t of sccGroups[i]) {
+          tableToSccIndex.set(t, i);
+        }
+      }
+
+      // Build adjacency list and in-degree for the condensation DAG.
+      // An edge from SCC-i to SCC-j means SCC-i must come before SCC-j
+      // (i.e. there is an edge from a table in SCC-i to a table in SCC-j
+      // in the parent->child direction of our topo-sort graph).
+      const sccAdj = new Map<number, Set<number>>();
+      const sccInDegree = new Map<number, number>();
+      for (let i = 0; i < sccGroups.length; i++) {
+        sccAdj.set(i, new Set());
+        sccInDegree.set(i, 0);
+      }
+
+      // Traverse edges in the filtered subgraph (parent -> child direction).
+      // If source and target belong to different SCCs, add a condensation edge.
+      for (const [parentNode, children] of adj) {
+        const parentScc = tableToSccIndex.get(parentNode);
+        if (parentScc === undefined) continue; // not a cycle node
+
+        for (const childNode of children) {
+          const childScc = tableToSccIndex.get(childNode);
+          if (childScc === undefined) continue; // not a cycle node
+          if (parentScc === childScc) continue; // same SCC, skip
+
+          if (!sccAdj.get(parentScc)!.has(childScc)) {
+            sccAdj.get(parentScc)!.add(childScc);
+            sccInDegree.set(childScc, sccInDegree.get(childScc)! + 1);
+          }
+        }
+      }
+
+      // Step 3: Topologically sort the condensation DAG with alphabetical
+      // tie-breaking (using the alphabetically smallest table in each SCC group
+      // as the sort key so the output is deterministic).
+      const sccVisited = new Set<number>();
+      let sccCurrentLayer: number[] = [];
+      for (const [idx, deg] of sccInDegree) {
+        if (deg === 0) sccCurrentLayer.push(idx);
+      }
+      // Sort by the smallest member of each SCC group for determinism
+      sccCurrentLayer.sort((a, b) => sccGroups[a][0].localeCompare(sccGroups[b][0]));
+
+      while (sccCurrentLayer.length > 0) {
+        const sccNextLayer: number[] = [];
+
+        for (const sccIdx of sccCurrentLayer) {
+          if (sccVisited.has(sccIdx)) continue;
+          sccVisited.add(sccIdx);
+
+          // Step 4: Emit tables in this SCC (already sorted alphabetically).
+          for (const t of sccGroups[sccIdx]) {
+            result.push(t);
+          }
+
+          // Decrement in-degrees of successor SCCs
+          for (const nextSccIdx of sccAdj.get(sccIdx)!) {
+            const newDeg = sccInDegree.get(nextSccIdx)! - 1;
+            sccInDegree.set(nextSccIdx, newDeg);
+            if (newDeg === 0 && !sccVisited.has(nextSccIdx)) {
+              sccNextLayer.push(nextSccIdx);
+            }
+          }
+        }
+
+        sccNextLayer.sort((a, b) => sccGroups[a][0].localeCompare(sccGroups[b][0]));
+        sccCurrentLayer = sccNextLayer;
+      }
+
+      // Safety: emit any SCC groups not yet visited (shouldn't happen in a
+      // well-formed condensation DAG, but guards against edge cases).
+      for (let i = 0; i < sccGroups.length; i++) {
+        if (!sccVisited.has(i)) {
+          for (const t of sccGroups[i]) {
+            result.push(t);
+          }
+        }
       }
     }
 

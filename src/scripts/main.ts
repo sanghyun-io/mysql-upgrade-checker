@@ -11,6 +11,7 @@ import {
   generateFixQueriesSQL,
   downloadFile
 } from './report';
+import { sanitizeSQLComment } from './security/sanitizer';
 
 let uploadedFiles: File[] = [];
 let analysisResults: AnalysisResults = {
@@ -363,7 +364,7 @@ document.body.appendChild(folderInput);
   const queries = analysisResults.issues
     .filter((issue) => issue.fixQuery)
     .map((issue) => {
-      return `-- ${issue.title}\n-- 위치: ${issue.location}\n${issue.fixQuery}\n`;
+      return `-- ${sanitizeSQLComment(issue.title)}\n-- 위치: ${sanitizeSQLComment(issue.location ?? '')}\n${issue.fixQuery}\n`;
     })
     .join('\n\n');
 

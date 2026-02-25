@@ -4,6 +4,7 @@
  */
 
 import type { Issue, RuleCategory, AnalysisResults } from './types';
+import { sanitizeSQLComment } from './security/sanitizer';
 
 // ============================================================================
 // MySQL Shell Compatible Report Format
@@ -188,9 +189,9 @@ export function generateFixQueriesSQL(issues: Issue[]): string {
     lines.push('');
 
     categoryIssues.forEach((issue, index) => {
-      lines.push(`-- Fix ${index + 1}: ${issue.title}`);
+      lines.push(`-- Fix ${index + 1}: ${sanitizeSQLComment(issue.title)}`);
       if (issue.location) {
-        lines.push(`-- Location: ${issue.location}`);
+        lines.push(`-- Location: ${sanitizeSQLComment(issue.location)}`);
       }
       lines.push(issue.fixQuery!);
       lines.push('');

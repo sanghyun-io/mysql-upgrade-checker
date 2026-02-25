@@ -81,7 +81,7 @@ export function generateMigrationPlan(
       generatePreflightPhase(issues),
       generatePreparationPhase(orderedGroups, summary),
       generateExecutionPhase(orderedGroups),
-      generateValidationPhase(orderedGroups),
+      generateValidationPhase(orderedGroups, summary),
     ],
     summary,
   };
@@ -208,7 +208,7 @@ function generateExecutionPhase(groups: OrderedFixGroup[]): MigrationPhase {
   };
 }
 
-function generateValidationPhase(groups: OrderedFixGroup[]): MigrationPhase {
+function generateValidationPhase(groups: OrderedFixGroup[], summary: PlanSummary): MigrationPhase {
   const steps: PlanStep[] = [];
   let order = 1;
 
@@ -229,15 +229,17 @@ function generateValidationPhase(groups: OrderedFixGroup[]): MigrationPhase {
       required: true,
     });
 
-    // FK re-enable
-    steps.push({
-      order: order++,
-      title: 'FK 체크 재활성화',
-      description: 'FK 체크를 다시 활성화합니다.',
-      type: 'query',
-      sql: 'SET FOREIGN_KEY_CHECKS = 1;',
-      required: true,
-    });
+    // FK re-enable — only emit if preparation actually disabled FK checks
+    if (summary.needsFKDisable) {
+      steps.push({
+        order: order++,
+        title: 'FK 체크 재활성화',
+        description: 'FK 체크를 다시 활성화합니다.',
+        type: 'query',
+        sql: 'SET FOREIGN_KEY_CHECKS = 1;',
+        required: true,
+      });
+    }
   }
 
   // Version re-check

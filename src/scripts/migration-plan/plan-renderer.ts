@@ -5,7 +5,7 @@
  * All untrusted content is sanitized via escapeHtml.
  */
 
-import { escapeHtml, sanitizeSqlForDisplay, generateCSPMetaTag } from '../security/sanitizer';
+import { escapeHtml, sanitizeSqlForDisplay, generateCSPMetaTag, sanitizeSQLComment } from '../security/sanitizer';
 import type { MigrationPlan, MigrationPhase, PlanStep, PlanSummary } from './plan-generator';
 
 // ============================================================================
@@ -142,22 +142,27 @@ export function renderPlanAsSQL(plan: MigrationPlan): string {
     const sqlSteps = phase.steps.filter(s => s.sql);
     if (sqlSteps.length === 0) continue;
 
-    lines.push(`-- Phase: ${phase.title}`);
-    lines.push(`-- ${phase.description}`);
+    lines.push(`-- Phase: ${sanitizeSQLComment(phase.title)}`);
+    lines.push(`-- ${sanitizeSQLComment(phase.description)}`);
     lines.push('-- ----------------------------------------------------------------------------');
     lines.push('');
 
     for (const step of sqlSteps) {
-      lines.push(`-- Step ${step.order}: ${step.title}`);
+      lines.push(`-- Step ${step.order}: ${sanitizeSQLComment(step.title)}`);
       if (step.severity) {
-        lines.push(`-- Severity: ${step.severity}`);
+        lines.push(`-- Severity: ${sanitizeSQLComment(step.severity)}`);
       }
       lines.push(step.sql!);
       lines.push('');
 
       if (step.rollback?.rollbackSQL) {
         lines.push(`-- Rollback for Step ${step.order}:`);
-        lines.push(`-- ${step.rollback.rollbackSQL.replace(/\n/g, '\n-- ')}`);
+        // Rollback SQL is rendered as commented-out lines; sanitize each line
+        // to prevent newline injection from breaking out of comments.
+        const rollbackLines = step.rollback.rollbackSQL.split('\n');
+        for (const rollbackLine of rollbackLines) {
+          lines.push(`-- ${sanitizeSQLComment(rollbackLine)}`);
+        }
         lines.push('');
       }
     }

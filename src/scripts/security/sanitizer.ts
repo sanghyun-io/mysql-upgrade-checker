@@ -53,6 +53,23 @@ export function generateCSPMetaTag(): string {
 }
 
 /**
+ * Sanitize a string for safe insertion into a SQL line comment (-- ...).
+ * Removes newlines and control characters that could break out of a comment
+ * and inject executable SQL on subsequent lines.
+ *
+ * Example attack prevented:
+ *   title = "foo\nDROP TABLE users; --"
+ *   Without sanitization → "-- foo\nDROP TABLE users; --" (DROP executes!)
+ *   With sanitization    → "-- foo DROP TABLE users; --" (stays a comment)
+ */
+export function sanitizeSQLComment(text: string): string {
+  if (!text) return '';
+  // Remove newlines and control characters (U+0000–U+001F) that could break
+  // out of a single-line SQL comment, replacing them with a space.
+  return text.replace(/[\r\n\x00-\x1f]/g, ' ').trim();
+}
+
+/**
  * Sanitize a filename to prevent path traversal and special character injection.
  * Allows alphanumeric, hyphens, underscores, dots, and spaces.
  */
