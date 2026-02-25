@@ -412,5 +412,55 @@ export const invalidObjectsRules: CompatibilityRule[] = [
     description: 'MAXDB SQL 모드는 MySQL 8.0에서 제거되었습니다.',
     suggestion: 'sql_mode에서 MAXDB를 제거하세요.',
     mysqlShellCheckId: 'maxdbSqlModeFlags'
+  },
+
+  // Routine/View/Trigger DEFINER Validation
+  {
+    id: 'definer_missing_check',
+    type: 'schema',
+    category: 'invalidObjects',
+    pattern: /CREATE\s+(?:PROCEDURE|FUNCTION|TRIGGER|EVENT)\s+(?!.*DEFINER)/gi,
+    severity: 'info',
+    title: 'DEFINER 미지정 루틴/트리거/이벤트',
+    description: 'DEFINER가 명시되지 않은 루틴/트리거/이벤트는 생성한 사용자의 DEFINER를 사용합니다. 업그레이드 시 해당 사용자가 존재하지 않으면 오류가 발생할 수 있습니다.',
+    suggestion: 'DEFINER를 명시적으로 지정하거나, 업그레이드 전에 DEFINER 사용자가 존재하는지 확인하세요.',
+    mysqlShellCheckId: 'routineSyntax'
+  },
+  {
+    id: 'definer_user_check',
+    type: 'schema',
+    category: 'invalidObjects',
+    pattern: /DEFINER\s*=\s*`?([^`@\s]+)`?\s*@\s*`?([^`\s]+)`?/gi,
+    severity: 'info',
+    title: 'DEFINER 사용자 확인 필요',
+    description: 'DEFINER로 지정된 사용자가 업그레이드 후에도 존재하는지 확인이 필요합니다. 특히 인증 플러그인 변경(mysql_native_password 비활성화)의 영향을 받을 수 있습니다.',
+    suggestion: '업그레이드 전에 DEFINER 사용자 목록을 확인하고, 사용자 존재 여부 및 인증 플러그인을 점검하세요.',
+    mysqlShellCheckId: 'routineSyntax'
+  },
+
+  // MEMORY Engine Warning
+  {
+    id: 'memory_engine',
+    type: 'schema',
+    category: 'invalidObjects',
+    pattern: /ENGINE\s*=\s*MEMORY/gi,
+    severity: 'info',
+    title: 'MEMORY 엔진 사용',
+    description: 'MEMORY 엔진은 서버 재시작 시 데이터가 손실됩니다. 업그레이드 과정에서 데이터 손실에 주의하세요.',
+    suggestion: '영구 저장이 필요한 데이터는 InnoDB로 변경을 고려하세요.',
+    mysqlShellCheckId: 'myisamEngine'
+  },
+
+  // CSV Engine Warning
+  {
+    id: 'csv_engine',
+    type: 'schema',
+    category: 'invalidObjects',
+    pattern: /ENGINE\s*=\s*CSV/gi,
+    severity: 'info',
+    title: 'CSV 엔진 사용',
+    description: 'CSV 엔진은 제한적인 기능(인덱스, 트랜잭션 미지원)을 가집니다. 업그레이드 시 동작 변경에 주의하세요.',
+    suggestion: 'InnoDB로 변경을 고려하세요.',
+    mysqlShellCheckId: 'myisamEngine'
   }
 ];
