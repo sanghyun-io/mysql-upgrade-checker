@@ -84,8 +84,9 @@ describe('escapeStringValue', () => {
     expect(escapeStringValue('hello')).toBe("'hello'");
   });
 
-  it('escapes embedded single quotes by doubling them', () => {
-    expect(escapeStringValue("O'Brien")).toBe("'O''Brien'");
+  it('escapes embedded single quotes with backslash', () => {
+    // ' → \' (MySQL backslash escaping, not doubling)
+    expect(escapeStringValue("O'Brien")).toBe("'O\\'Brien'");
   });
 
   it('handles empty string', () => {
@@ -101,10 +102,57 @@ describe('escapeStringValue', () => {
   });
 
   it('handles value with multiple single quotes', () => {
-    // Input: "it's a ''test''" — 5 single quotes: positions after t, before test (×2), after test (×2)
-    // Each ' → '', so 5 quotes become 10 doubled-up quotes in the body
-    // Wrapped: 'it''s a ''''test'''''
-    expect(escapeStringValue("it's a ''test''")).toBe("'it''s a ''''test'''''");
+    // Each ' → \', so "it's a ''test''" → "it\'s a \'\'test\'\'"
+    expect(escapeStringValue("it's a ''test''")).toBe("'it\\'s a \\'\\'test\\'\\''" );
+  });
+
+  // --- Backslash escaping tests ---
+
+  it('escapes a single backslash to double backslash', () => {
+    // Input: test\host  →  body: test\\host  →  wrapped: 'test\\host'
+    expect(escapeStringValue('test\\host')).toBe("'test\\\\host'");
+  });
+
+  it('escapes backslash immediately before a single quote', () => {
+    // Input chars: h o s t \ '
+    // step1 \ → \\: body so far has \\
+    // step2 ' → \': the quote becomes \'
+    // body: host\\\' → wrapped: 'host\\\''
+    expect(escapeStringValue("host\\'")).toBe("'host\\\\\\''");
+  });
+
+  // --- Control character tests ---
+
+  it('escapes null byte to \\0', () => {
+    expect(escapeStringValue('a\0b')).toBe("'a\\0b'");
+  });
+
+  it('escapes newline to \\n', () => {
+    expect(escapeStringValue('line1\nline2')).toBe("'line1\\nline2'");
+  });
+
+  it('escapes carriage return to \\r', () => {
+    expect(escapeStringValue('line1\rline2')).toBe("'line1\\rline2'");
+  });
+
+  it('escapes Ctrl+Z (\\x1a) to \\Z', () => {
+    expect(escapeStringValue('data\x1amore')).toBe("'data\\Zmore'");
+  });
+
+  // --- Combined attack test ---
+
+  it('escapes a combined SQL injection attempt with backslash and quote', () => {
+    // Input: host\'; DROP TABLE users; --
+    // Input chars: ...h o s t \ ' ; ...
+    // step1 \ → \\: host\\'; DROP TABLE users; --
+    // step2 ' → \': host\\\''; DROP TABLE users; -- → No, only the ' gets \' not duplicated
+    // After step1 the string has: host\\ followed by ' followed by ; DROP TABLE...
+    // After step2 the ' → \', giving: host\\\'  followed by ; DROP TABLE...
+    // Body: host\\\'; DROP TABLE users; --
+    // Wrapped: 'host\\\'; DROP TABLE users; --'
+    const attack = "host\\'; DROP TABLE users; --";
+    const expected = "'" + 'host' + '\\\\' + "\\'" + '; DROP TABLE users; --' + "'";
+    expect(escapeStringValue(attack)).toBe(expected);
   });
 });
 

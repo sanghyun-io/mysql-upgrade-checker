@@ -36,7 +36,15 @@ function normalizeRow(row: Record<string, unknown>): Record<string, unknown> {
  */
 export function analyzeServerResult(rawText: string): Issue[] {
   if (!rawText || !rawText.trim()) {
-    return [];
+    return [{
+      id: 'server_empty_result',
+      type: 'config' as const,
+      category: 'invalidObjects' as const,
+      severity: 'warning' as const,
+      title: '서버 쿼리 결과가 비어있음',
+      description: '업로드한 파일에 분석 가능한 데이터가 없습니다. 서버 쿼리를 다시 실행해 주세요.',
+      suggestion: 'Server Query 탭의 쿼리를 실행한 결과를 복사하여 붙여넣기 해주세요.',
+    }];
   }
 
   let parsed: ServerQueryResult;
@@ -46,8 +54,20 @@ export function analyzeServerResult(rawText: string): Issue[] {
     return [makeParseErrorIssue('서버 쿼리 결과를 파싱할 수 없습니다. TSV 또는 JSON 형식인지 확인하세요.')];
   }
 
-  if (parsed.columns.length === 0 || parsed.rows.length === 0) {
-    return [];
+  if (parsed.columns.length === 0) {
+    return [makeParseErrorIssue('서버 쿼리 결과를 파싱할 수 없습니다. TSV 또는 JSON 형식인지 확인하세요.')];
+  }
+
+  if (parsed.rows.length === 0) {
+    return [{
+      id: 'server_no_data',
+      type: 'config' as const,
+      category: 'invalidObjects' as const,
+      severity: 'warning' as const,
+      title: '서버 쿼리 결과에 데이터 없음',
+      description: '파싱은 성공했으나 데이터 행이 없습니다.',
+      suggestion: '쿼리 결과에 데이터가 포함되어 있는지 확인해 주세요.',
+    }];
   }
 
   // Auto-detect result type from columns

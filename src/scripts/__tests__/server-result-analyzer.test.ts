@@ -175,12 +175,30 @@ describe('analyzeServerResult - TABLE SIZE', () => {
 
 describe('analyzeServerResult - robustness', () => {
   it('should handle empty input', () => {
-    expect(analyzeServerResult('')).toEqual([]);
-    expect(analyzeServerResult('  ')).toEqual([]);
+    expect(analyzeServerResult('')).toEqual([{
+      id: 'server_empty_result',
+      type: 'config',
+      category: 'invalidObjects',
+      severity: 'warning',
+      title: '서버 쿼리 결과가 비어있음',
+      description: '업로드한 파일에 분석 가능한 데이터가 없습니다. 서버 쿼리를 다시 실행해 주세요.',
+      suggestion: 'Server Query 탭의 쿼리를 실행한 결과를 복사하여 붙여넣기 해주세요.',
+    }]);
+    expect(analyzeServerResult('  ')).toEqual([{
+      id: 'server_empty_result',
+      type: 'config',
+      category: 'invalidObjects',
+      severity: 'warning',
+      title: '서버 쿼리 결과가 비어있음',
+      description: '업로드한 파일에 분석 가능한 데이터가 없습니다. 서버 쿼리를 다시 실행해 주세요.',
+      suggestion: 'Server Query 탭의 쿼리를 실행한 결과를 복사하여 붙여넣기 해주세요.',
+    }]);
   });
 
   it('should handle null-like input', () => {
-    expect(analyzeServerResult(undefined as unknown as string)).toEqual([]);
+    const result = analyzeServerResult(undefined as unknown as string);
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe('server_empty_result');
   });
 
   it('should handle malformed TSV (mismatched columns)', () => {
@@ -219,7 +237,9 @@ describe('analyzeServerResult - robustness', () => {
   it('should handle header-only TSV (no data rows)', () => {
     const tsv = 'col1\tcol2\tcol3';
     const issues = analyzeServerResult(tsv);
-    expect(issues).toEqual([]);
+    expect(issues).toHaveLength(1);
+    expect(issues[0].id).toBe('server_no_data');
+    expect(issues[0].severity).toBe('warning');
   });
 
   it('should handle single column TSV', () => {
@@ -261,6 +281,28 @@ describe('analyzeServerResult - robustness', () => {
       expect(issue).toHaveProperty('id');
       expect(issue).toHaveProperty('severity');
     }
+  });
+
+  it('empty string should return server_empty_result issue', () => {
+    const issues = analyzeServerResult('');
+    expect(issues).toHaveLength(1);
+    expect(issues[0].id).toBe('server_empty_result');
+    expect(issues[0].severity).toBe('warning');
+  });
+
+  it('whitespace-only string should return server_empty_result issue', () => {
+    const issues = analyzeServerResult('   \n\t  ');
+    expect(issues).toHaveLength(1);
+    expect(issues[0].id).toBe('server_empty_result');
+    expect(issues[0].severity).toBe('warning');
+  });
+
+  it('valid headers but no data rows should return server_no_data issue', () => {
+    const tsv = 'VARIABLE_NAME\tVARIABLE_VALUE';
+    const issues = analyzeServerResult(tsv);
+    expect(issues).toHaveLength(1);
+    expect(issues[0].id).toBe('server_no_data');
+    expect(issues[0].severity).toBe('warning');
   });
 });
 
@@ -463,12 +505,13 @@ describe('analyzeServerResult - COMBINED (check_type)', () => {
     expect(issues).toEqual([]);
   });
 
-  it('should return empty for combined result with no matching rows', () => {
+  it('should return server_no_data for combined result with no matching rows', () => {
     const tsv = [
       'check_type\tuser_name\thost\tauth_plugin',
     ].join('\n');
     const issues = analyzeServerResult(tsv);
-    expect(issues).toEqual([]);
+    expect(issues).toHaveLength(1);
+    expect(issues[0].id).toBe('server_no_data');
   });
 });
 

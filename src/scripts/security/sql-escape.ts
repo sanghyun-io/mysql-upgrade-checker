@@ -24,12 +24,29 @@ export function escapeIdentifier(name: string): string {
 
 /**
  * Escape a string value for SQL (single-quote delimited).
- * Escapes embedded single quotes by doubling them.
+ * Implements full MySQL string literal escaping per the MySQL manual:
+ * https://dev.mysql.com/doc/refman/8.0/en/string-literals.html
+ *
+ * Escapes (in order):
+ *  1. Backslashes (must come first to avoid double-escaping subsequent replacements)
+ *  2. Single quotes
+ *  3. Null byte (\0)
+ *  4. Newline (\n)
+ *  5. Carriage return (\r)
+ *  6. Ctrl+Z / EOF on Windows (\x1a → \Z)
  *
  * @example
- * escapeStringValue("O'Brien")  // => "'O''Brien'"
- * escapeStringValue('normal')   // => "'normal'"
+ * escapeStringValue("O'Brien")       // => "'O\\'Brien'"
+ * escapeStringValue('normal')        // => "'normal'"
+ * escapeStringValue('test\\host')    // => "'test\\\\host'"
  */
 export function escapeStringValue(value: string): string {
-  return "'" + value.replace(/'/g, "''") + "'";
+  const escaped = value
+    .replace(/\\/g, '\\\\')    // backslash first (before other replacements)
+    .replace(/'/g, "\\'")      // single quote
+    .replace(/\0/g, '\\0')    // null byte
+    .replace(/\n/g, '\\n')    // newline
+    .replace(/\r/g, '\\r')    // carriage return
+    .replace(/\x1a/g, '\\Z'); // Ctrl+Z (EOF on Windows)
+  return "'" + escaped + "'";
 }
