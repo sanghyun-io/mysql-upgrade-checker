@@ -99,13 +99,14 @@ export function getPreflightSummary(items: PreflightItem[]): {
   const total = items.length;
   const completed = items.filter(i => i.status === 'passed' || i.status === 'skipped').length;
   const required = items.filter(i => i.required).length;
-  const requiredCompleted = items.filter(i => i.required && (i.status === 'passed' || i.status === 'skipped')).length;
+  // Only count required items with status 'passed' — skipped required items do NOT satisfy the safety gate.
+  const requiredCompleted = items.filter(i => i.required && i.status === 'passed').length;
 
   return {
     total,
     completed,
     required,
     requiredCompleted,
-    allRequiredPassed: requiredCompleted >= required,
+    allRequiredPassed: required > 0 ? requiredCompleted === required : true,
   };
 }

@@ -8,6 +8,7 @@
 import type { Reversibility } from '../domain/issue-taxonomy';
 import type { FixOption } from '../domain/fix-option';
 import type { Issue } from '../types';
+import { resolveFixOption } from './fix-resolver';
 
 export interface RollbackEntry {
   /** Original fix SQL */
@@ -24,8 +25,8 @@ export interface RollbackEntry {
  * Generate rollback info for an issue's recommended fix option.
  */
 export function generateRollbackEntry(issue: Issue): RollbackEntry | null {
-  // Use recommended fix option if available
-  const fixOption = issue.fixOptions?.find(o => o.isRecommended) ?? issue.fixOptions?.[0];
+  // Use the same option resolution as plan-generator to ensure consistency
+  const fixOption = resolveFixOption(issue.fixOptions);
 
   if (fixOption) {
     return rollbackFromFixOption(fixOption);

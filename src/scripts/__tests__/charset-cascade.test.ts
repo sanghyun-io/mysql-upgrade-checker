@@ -162,7 +162,7 @@ describe('analyzeCharsetCascade', () => {
     expect(charsetIssues[0].severity).toBe('error');
   });
 
-  it('should handle composite FK with multiple column pairs', () => {
+  it('should handle composite FK with multiple column pairs — single issue per FK edge', () => {
     const tables = new Map<string, TableInfo>();
     tables.set('parent', makeTable('parent', {
       charset: 'utf8mb4',
@@ -172,7 +172,7 @@ describe('analyzeCharsetCascade', () => {
       ],
     }));
     tables.set('child', makeTable('child', {
-      charset: 'utf8mb3', // mismatch
+      charset: 'utf8mb3', // mismatch on both columns
       columns: [
         { name: 'id', type: 'INT', nullable: false },
         { name: 'ref1', type: 'VARCHAR(50)', nullable: true },
@@ -191,8 +191,11 @@ describe('analyzeCharsetCascade', () => {
 
     const issues = analyzeCharsetCascade(tables, graph);
     const charsetIssues = issues.filter(i => i.id === 'fk_charset_mismatch');
-    // Should report for each column pair
-    expect(charsetIssues.length).toBe(2);
+    // Issue #7 fix: composite FK with multiple mismatched columns should produce ONE issue per FK edge
+    expect(charsetIssues.length).toBe(1);
+    // The single issue should mention both column pairs in the description
+    expect(charsetIssues[0].description).toContain('ref1');
+    expect(charsetIssues[0].description).toContain('ref2');
   });
 
   it('should handle tables with no FKs (no issues)', () => {
@@ -400,5 +403,138 @@ describe('analyzeCharsetCascade', () => {
     const charsetIssues = issues.filter(i => i.id === 'fk_charset_mismatch');
     expect(charsetIssues.length).toBe(1);
     expect(charsetIssues[0].severity).toBe('warning'); // Not error, since not utf8mb3/utf8mb4 pair
+  });
+
+  // --- Issue #11: Edge case tests ---
+
+  it('should skip gracefully when FK column pair arrays have mismatched lengths', () => {
+    // This simulates a corrupted or unusual FK definition where childColumns and
+    // parentColumns have different lengths — should not crash, should produce no issues
+    const tables = new Map<string, TableInfo>();
+    tables.set('parent', makeTable('parent', {
+      charset: 'utf8mb4',
+      columns: [{ name: 'id', type: 'VARCHAR(50)', nullable: false }],
+    }));
+    tables.set('child', makeTable('child', {
+      charset: 'utf8mb3',
+      columns: [
+        { name: 'id', type: 'INT', nullable: false },
+        { name: 'ref1', type: 'VARCHAR(50)', nullable: true },
+        { name: 'ref2', type: 'VARCHAR(50)', nullable: true },
+      ],
+      fks: [{
+        name: 'fk_bad_composite',
+        columns: ['ref1', 'ref2'],
+        refTable: 'parent',
+        refColumns: ['id'], // length mismatch: 2 child columns vs 1 parent column
+      }],
+    }));
+
+    const graph = new FKGraphBuilder();
+    graph.buildFromTableInfos(tables);
+
+    // Should not throw and should return no issues for the malformed edge
+    let issues: ReturnType<typeof analyzeCharsetCascade>;
+    expect(() => {
+      issues = analyzeCharsetCascade(tables, graph);
+    }).not.toThrow();
+    const charsetIssues = issues!.filter(i => i.id === 'fk_charset_mismatch');
+    expect(charsetIssues.length).toBe(0);
+  });
+
+  it('should skip gracefully when column metadata is not found for both sides', () => {
+    // Both child and parent columns are missing from the column list.
+    // The analyzer should skip rather than use table-level default (avoids false positives).
+    const tables = new Map<string, TableInfo>();
+    tables.set('parent', makeTable('parent', {
+      charset: 'utf8mb4',
+      columns: [
+        // 'id' column exists in the FK but is not listed — simulates incomplete schema dump
+      ],
+    }));
+    tables.set('child', makeTable('child', {
+      charset: 'utf8mb3',
+      columns: [
+        // 'parent_id' column also missing
+      ],
+      fks: [{ name: 'fk_missing_cols', columns: ['parent_id'], refTable: 'parent', refColumns: ['id'] }],
+    }));
+
+    const graph = new FKGraphBuilder();
+    graph.buildFromTableInfos(tables);
+
+    const issues = analyzeCharsetCascade(tables, graph);
+    const charsetIssues = issues.filter(i => i.id === 'fk_charset_mismatch');
+    // When both column metadatas are missing, skip the pair (avoid false positive)
+    expect(charsetIssues.length).toBe(0);
+  });
+
+  it('should produce a single issue per FK edge when composite FK has multiple mismatched column pairs', () => {
+    // Composite FK with 3 text columns all mismatched — should emit exactly 1 issue
+    const tables = new Map<string, TableInfo>();
+    tables.set('parent', makeTable('parent', {
+      charset: 'utf8mb4',
+      columns: [
+        { name: 'k1', type: 'VARCHAR(20)', nullable: false, charset: 'utf8mb4' },
+        { name: 'k2', type: 'VARCHAR(20)', nullable: false, charset: 'utf8mb4' },
+        { name: 'k3', type: 'CHAR(10)', nullable: false, charset: 'utf8mb4' },
+      ],
+    }));
+    tables.set('child', makeTable('child', {
+      charset: 'utf8mb3',
+      columns: [
+        { name: 'id', type: 'INT', nullable: false },
+        { name: 'fk1', type: 'VARCHAR(20)', nullable: true, charset: 'utf8mb3' },
+        { name: 'fk2', type: 'VARCHAR(20)', nullable: true, charset: 'utf8mb3' },
+        { name: 'fk3', type: 'CHAR(10)', nullable: true, charset: 'utf8mb3' },
+      ],
+      fks: [{
+        name: 'fk_multi_col',
+        columns: ['fk1', 'fk2', 'fk3'],
+        refTable: 'parent',
+        refColumns: ['k1', 'k2', 'k3'],
+      }],
+    }));
+
+    const graph = new FKGraphBuilder();
+    graph.buildFromTableInfos(tables);
+
+    const issues = analyzeCharsetCascade(tables, graph);
+    const charsetIssues = issues.filter(i => i.id === 'fk_charset_mismatch');
+    // Must be exactly 1 issue for the entire FK edge, not 3 (one per column pair)
+    expect(charsetIssues.length).toBe(1);
+    expect(charsetIssues[0].severity).toBe('error');
+    // Description should mention all three mismatched column pairs
+    expect(charsetIssues[0].description).toContain('fk1');
+    expect(charsetIssues[0].description).toContain('fk2');
+    expect(charsetIssues[0].description).toContain('fk3');
+  });
+
+  it('should handle self-referencing FK charset check gracefully', () => {
+    // A table that has an FK pointing to itself — should not crash and should detect mismatch
+    // In practice, self-ref FKs on same table always share charset, so no mismatch expected
+    const tables = new Map<string, TableInfo>();
+    tables.set('category', makeTable('category', {
+      charset: 'utf8mb4',
+      collation: 'utf8mb4_unicode_ci',
+      columns: [
+        { name: 'id', type: 'INT', nullable: false },
+        { name: 'parent_id', type: 'INT', nullable: true },
+        { name: 'name', type: 'VARCHAR(100)', nullable: false, charset: 'utf8mb4', collation: 'utf8mb4_unicode_ci' },
+      ],
+      fks: [{ name: 'fk_self', columns: ['parent_id'], refTable: 'category', refColumns: ['id'] }],
+    }));
+
+    const graph = new FKGraphBuilder();
+    graph.buildFromTableInfos(tables);
+
+    let issues: ReturnType<typeof analyzeCharsetCascade>;
+    expect(() => {
+      issues = analyzeCharsetCascade(tables, graph);
+    }).not.toThrow();
+
+    // Self-ref FK with INT columns — no charset issue expected
+    const charsetIssues = issues!.filter(i => i.id === 'fk_charset_mismatch');
+    expect(charsetIssues.length).toBe(0);
   });
 });

@@ -13,6 +13,7 @@ import { generateRollbackEntry } from './rollback-generator';
 import type { RollbackEntry } from './rollback-generator';
 import type { OrderedFixGroup } from './execution-order';
 import { createPreflightChecklist } from '../analysis/preflight';
+import { resolveFixOption } from './fix-resolver';
 
 // ============================================================================
 // Plan Data Types
@@ -179,13 +180,9 @@ function generateExecutionPhase(groups: OrderedFixGroup[]): MigrationPhase {
     if (group.tableName === '__config__') continue;
 
     for (const issue of group.issues) {
-      const rollback = generateRollbackEntry(issue);
-      const recommendedOption = issue.fixOptions?.find(o => o.isRecommended);
-      // Issue #7 fix: fallback to first option with SQL when recommended has none
-      const fixOption = recommendedOption?.sqlTemplate
-        ? recommendedOption
-        : issue.fixOptions?.find(o => o.sqlTemplate) ?? recommendedOption ?? issue.fixOptions?.[0];
+      const fixOption = resolveFixOption(issue.fixOptions);
       const sql = fixOption?.sqlTemplate ?? issue.fixQuery;
+      const rollback = generateRollbackEntry(issue);
 
       if (!sql) continue;
 

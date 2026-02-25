@@ -11,6 +11,9 @@ import type { Issue, Severity } from '../types';
 import { REMOVED_SYS_VARS_84 } from '../constants';
 import { parseServerResult, type ServerQueryResult } from '../parsers/server-result-parser';
 
+// Convert array to Set for O(1) lookup instead of O(N) per-row linear scan
+const REMOVED_SYS_VARS_SET = new Set<string>(REMOVED_SYS_VARS_84);
+
 /** Normalize a row's keys to lowercase for case-insensitive access */
 function normalizeRow(row: Record<string, unknown>): Record<string, unknown> {
   const normalized: Record<string, unknown> = {};
@@ -171,7 +174,7 @@ function analyzeVariablesResult(result: ServerQueryResult): Issue[] {
     const varValue = String(nrow['variable_value'] ?? nrow['value'] ?? '');
 
     // Check against removed variables
-    if ((REMOVED_SYS_VARS_84 as readonly string[]).includes(varName)) {
+    if (REMOVED_SYS_VARS_SET.has(varName)) {
       issues.push(makeIssue(
         'server_removed_variable',
         'error',

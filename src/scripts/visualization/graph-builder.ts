@@ -68,16 +68,22 @@ export function buildGraphFromContext(
         .filter(i => i.tableName)
         .map(i => i.tableName!.toLowerCase())
     );
-    // Also include their FK neighbors for context
+    // Also include their FK neighbors for context.
+    // Track BFS-visited tables to avoid re-running BFS for tables already discovered
+    // by a prior iteration (deduplicates O(issueTables * graph) → effectively O(graph)).
     includedTables = new Set<string>();
+    const bfsVisited = new Set<string>();
     for (const table of issueTableSet) {
       // Issue #5 fix: Always include issue tables, even without FK edges
       includedTables.add(table);
-      if (allTableIds.has(table)) {
+      // Skip BFS if this table's neighborhood was already discovered
+      if (!bfsVisited.has(table) && allTableIds.has(table)) {
         const related = fkGraph.getRelatedTables(table);
         for (const r of related) {
           includedTables.add(r);
+          bfsVisited.add(r);
         }
+        bfsVisited.add(table);
       }
     }
   } else {

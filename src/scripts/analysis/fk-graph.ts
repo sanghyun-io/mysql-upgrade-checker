@@ -5,7 +5,9 @@
  * Supports:
  * - BFS-based related table discovery
  * - Tarjan's algorithm for strongly connected components (cycle detection)
- * - Topological sort (SCC-aware for cyclic graphs)
+ * - Topological sort via Kahn's algorithm with alphabetical tie-breaking.
+ *   Cycle nodes (SCCs with >1 member or self-referencing tables) are appended
+ *   at the end, grouped by SCC and sorted alphabetically within each SCC group.
  * - Self-referencing FK handling
  * - Missing reference detection
  */
@@ -234,9 +236,17 @@ export class FKGraphBuilder implements IFKGraphBuilder {
   }
 
   /**
-   * Topological sort of given tables, respecting FK dependencies.
-   * Parents come before children (safe execution order).
-   * Handles cycles by grouping SCCs.
+   * Kahn's algorithm with alphabetical tie-breaking.
+   *
+   * Parents come before children (safe execution order). Within each BFS
+   * layer (nodes whose in-degree reaches 0 in the same round), tables are
+   * sorted alphabetically so that the output is deterministic regardless of
+   * Map/Set insertion order.
+   *
+   * Cycle nodes (tables involved in circular FK dependencies) cannot be
+   * topologically ordered and are appended at the end. They are grouped by
+   * SCC and sorted alphabetically within each SCC group. SCCs themselves
+   * are ordered alphabetically by their smallest member.
    */
   getTopologicalOrder(tables: Set<string>): string[] {
     const tableKeys = new Set<string>();
@@ -263,37 +273,83 @@ export class FKGraphBuilder implements IFKGraphBuilder {
       }
     }
 
-    // Kahn's algorithm (index-based queue for O(n) BFS)
-    const queue: string[] = [];
-    for (const [node, deg] of inDegree) {
-      if (deg === 0) queue.push(node);
-    }
-
+    // Kahn's algorithm with alphabetical tie-breaking:
+    // Seed the first layer sorted alphabetically, then process layer by layer.
+    // When a node's in-degree reaches 0, it is added to the next-layer buffer
+    // (nextLayer), which is sorted before being added to the queue so that
+    // nodes in the same BFS round are always emitted in alphabetical order.
     const result: string[] = [];
     const visited = new Set<string>();
-    let qIdx = 0;
 
-    while (qIdx < queue.length) {
-      const node = queue[qIdx++];
-      if (visited.has(node)) continue;
-      visited.add(node);
-      result.push(node);
+    // Initial layer: all zero-in-degree nodes, sorted alphabetically
+    let currentLayer: string[] = [];
+    for (const [node, deg] of inDegree) {
+      if (deg === 0) currentLayer.push(node);
+    }
+    currentLayer.sort();
 
-      const neighbors = adj.get(node);
-      if (neighbors) {
-        for (const neighbor of neighbors) {
-          const newDeg = (inDegree.get(neighbor) ?? 1) - 1;
-          inDegree.set(neighbor, newDeg);
-          if (newDeg === 0 && !visited.has(neighbor)) {
-            queue.push(neighbor);
+    while (currentLayer.length > 0) {
+      const nextLayer: string[] = [];
+
+      for (const node of currentLayer) {
+        if (visited.has(node)) continue;
+        visited.add(node);
+        result.push(node);
+
+        const neighbors = adj.get(node);
+        if (neighbors) {
+          for (const neighbor of neighbors) {
+            const newDeg = (inDegree.get(neighbor) ?? 1) - 1;
+            inDegree.set(neighbor, newDeg);
+            if (newDeg === 0 && !visited.has(neighbor)) {
+              nextLayer.push(neighbor);
+            }
           }
         }
       }
+
+      // Sort the next layer alphabetically before processing
+      nextLayer.sort();
+      currentLayer = nextLayer;
     }
 
-    // Handle remaining nodes (part of cycles) - add in SCC order
+    // Handle remaining nodes (part of cycles).
+    // Group them by SCC and sort alphabetically within each SCC group.
+    // SCCs are ordered alphabetically by their smallest (first-sorted) member.
+    const cycleNodes = new Set<string>();
     for (const t of tableKeys) {
-      if (!visited.has(t)) {
+      if (!visited.has(t)) cycleNodes.add(t);
+    }
+
+    if (cycleNodes.size > 0) {
+      // Get SCCs that contain cycle nodes in the filtered subgraph
+      const allSCCs = this.getSCCs();
+      const sccGroups: string[][] = [];
+
+      for (const scc of allSCCs) {
+        // Only keep members that are in our cycle nodes set
+        const filtered = scc.filter(t => cycleNodes.has(t)).sort();
+        if (filtered.length > 0) {
+          sccGroups.push(filtered);
+        }
+      }
+
+      // Sort SCC groups by their alphabetically smallest member
+      sccGroups.sort((a, b) => a[0].localeCompare(b[0]));
+
+      // Track which cycle nodes we have assigned to an SCC group
+      const assignedNodes = new Set<string>();
+      for (const group of sccGroups) {
+        for (const t of group) {
+          assignedNodes.add(t);
+          result.push(t);
+        }
+      }
+
+      // Any remaining cycle nodes not captured by SCCs (e.g. isolated self-refs
+      // that getSCCs() may not include) are appended alphabetically
+      const remaining = [...cycleNodes].filter(t => !assignedNodes.has(t)).sort();
+      for (const t of remaining) {
         result.push(t);
       }
     }

@@ -8,8 +8,9 @@ import { describe, it, expect } from 'vitest';
 import { computeSugiyamaLayout } from '../visualization/sugiyama-layout';
 import { renderSVG, renderListView } from '../visualization/svg-renderer';
 import { buildGraphFromContext, NODE_CAP } from '../visualization/graph-builder';
+import { FKGraphBuilder } from '../analysis/fk-graph';
 import type { AnalysisContext, IFKGraphBuilder, IFKEdge } from '../domain/analysis-context';
-import type { Issue } from '../types';
+import type { Issue, TableInfo } from '../types';
 
 // ============================================================================
 // Helpers
@@ -411,5 +412,190 @@ describe('buildGraphFromContext', () => {
     const result = buildGraphFromContext(context, issues, true);
     const ordersNode = result.graph.nodes.find(n => n.id === 'orders');
     expect(ordersNode?.severity).toBe('error');
+  });
+});
+
+// ============================================================================
+// getTopologicalOrder — Determinism
+// ============================================================================
+
+/** Build a minimal TableInfo for FKGraphBuilder */
+function makeTableInfo(
+  name: string,
+  fks: Array<{ name: string; columns: string[]; refTable: string; refColumns: string[] }> = []
+): TableInfo {
+  return {
+    name,
+    engine: 'InnoDB',
+    charset: 'utf8mb4',
+    columns: [{ name: 'id', type: 'INT', nullable: false }],
+    indexes: [{ name: 'PRIMARY', columns: ['id'], unique: true, type: 'PRIMARY' }],
+    foreignKeys: fks,
+  };
+}
+
+describe('getTopologicalOrder — determinism', () => {
+  it('should produce identical output across multiple calls (same input, same order)', () => {
+    const tables = new Map<string, TableInfo>();
+    tables.set('users', makeTableInfo('users'));
+    tables.set('orders', makeTableInfo('orders', [
+      { name: 'fk_orders_users', columns: ['user_id'], refTable: 'users', refColumns: ['id'] },
+    ]));
+    tables.set('order_items', makeTableInfo('order_items', [
+      { name: 'fk_items_orders', columns: ['order_id'], refTable: 'orders', refColumns: ['id'] },
+    ]));
+    tables.set('payments', makeTableInfo('payments', [
+      { name: 'fk_payments_orders', columns: ['order_id'], refTable: 'orders', refColumns: ['id'] },
+    ]));
+
+    const graph = new FKGraphBuilder();
+    graph.buildFromTableInfos(tables);
+
+    const tableSet = new Set(tables.keys());
+    const run1 = graph.getTopologicalOrder(tableSet);
+    const run2 = graph.getTopologicalOrder(tableSet);
+    const run3 = graph.getTopologicalOrder(tableSet);
+
+    expect(run1).toEqual(run2);
+    expect(run2).toEqual(run3);
+  });
+
+  it('should produce the same order regardless of input Set iteration order', () => {
+    // Build the same logical graph with different insertion orders
+    const tablesA = new Map<string, TableInfo>();
+    tablesA.set('z_table', makeTableInfo('z_table'));
+    tablesA.set('a_child', makeTableInfo('a_child', [
+      { name: 'fk1', columns: ['z_id'], refTable: 'z_table', refColumns: ['id'] },
+    ]));
+    tablesA.set('m_middle', makeTableInfo('m_middle', [
+      { name: 'fk2', columns: ['z_id'], refTable: 'z_table', refColumns: ['id'] },
+    ]));
+
+    const tablesB = new Map<string, TableInfo>();
+    // Different insertion order
+    tablesB.set('m_middle', makeTableInfo('m_middle', [
+      { name: 'fk2', columns: ['z_id'], refTable: 'z_table', refColumns: ['id'] },
+    ]));
+    tablesB.set('a_child', makeTableInfo('a_child', [
+      { name: 'fk1', columns: ['z_id'], refTable: 'z_table', refColumns: ['id'] },
+    ]));
+    tablesB.set('z_table', makeTableInfo('z_table'));
+
+    const graphA = new FKGraphBuilder();
+    graphA.buildFromTableInfos(tablesA);
+
+    const graphB = new FKGraphBuilder();
+    graphB.buildFromTableInfos(tablesB);
+
+    const orderA = graphA.getTopologicalOrder(new Set(tablesA.keys()));
+    const orderB = graphB.getTopologicalOrder(new Set(tablesB.keys()));
+
+    // Both must place z_table before its children
+    expect(orderA.indexOf('z_table')).toBeLessThan(orderA.indexOf('a_child'));
+    expect(orderA.indexOf('z_table')).toBeLessThan(orderA.indexOf('m_middle'));
+    expect(orderB.indexOf('z_table')).toBeLessThan(orderB.indexOf('a_child'));
+    expect(orderB.indexOf('z_table')).toBeLessThan(orderB.indexOf('m_middle'));
+  });
+});
+
+// ============================================================================
+// buildGraphFromContext — Cap Behavior
+// ============================================================================
+
+describe('buildGraphFromContext — cap behavior', () => {
+  /** Build a large mock FK graph with N tables in a chain */
+  function buildLargeChainGraph(nodeCount: number): { edges: IFKEdge[]; relatedMap: Map<string, Set<string>> } {
+    const edges: IFKEdge[] = [];
+    for (let i = 1; i < nodeCount; i++) {
+      edges.push({
+        childTable: `t${i}`,
+        parentTable: `t${i - 1}`,
+        childColumns: ['parent_id'],
+        parentColumns: ['id'],
+        fkName: `fk_${i}`,
+      });
+    }
+    const relatedMap = new Map<string, Set<string>>();
+    for (let i = 0; i < nodeCount; i++) {
+      const related = new Set<string>();
+      if (i > 0) related.add(`t${i - 1}`);
+      if (i < nodeCount - 1) related.add(`t${i + 1}`);
+      relatedMap.set(`t${i}`, related);
+    }
+    return { edges, relatedMap };
+  }
+
+  it('should include nodes with issues even when capped', () => {
+    const nodeCount = NODE_CAP + 50; // deliberately exceed cap
+    const { edges, relatedMap } = buildLargeChainGraph(nodeCount);
+    const fkGraph = makeMockFKGraph(edges, relatedMap);
+
+    const context: AnalysisContext = {
+      fkGraph,
+      tableInfos: new Map(),
+      issues: [],
+    };
+
+    // Place issues on a few specific tables
+    const issueTables = ['t10', 't50', `t${nodeCount - 1}`];
+    const issues: Issue[] = issueTables.map(t => makeIssue({ tableName: t, severity: 'error' }));
+
+    const result = buildGraphFromContext(context, issues, false);
+
+    expect(result.isCapped).toBe(true);
+    expect(result.graph.nodes.length).toBeLessThanOrEqual(NODE_CAP);
+
+    // All issue tables must be present in the capped graph
+    for (const t of issueTables) {
+      expect(
+        result.graph.nodes.some(n => n.id === t),
+        `Issue table '${t}' must be included in capped graph`
+      ).toBe(true);
+    }
+  });
+
+  it('should not include non-issue tables beyond NODE_CAP', () => {
+    const nodeCount = NODE_CAP + 100;
+    const { edges, relatedMap } = buildLargeChainGraph(nodeCount);
+    const fkGraph = makeMockFKGraph(edges, relatedMap);
+
+    const context: AnalysisContext = {
+      fkGraph,
+      tableInfos: new Map(),
+      issues: [],
+    };
+
+    // Single issue table at the start of the chain
+    const issues: Issue[] = [makeIssue({ tableName: 't0', severity: 'error' })];
+
+    const result = buildGraphFromContext(context, issues, false);
+
+    expect(result.isCapped).toBe(true);
+    expect(result.graph.nodes.length).toBeLessThanOrEqual(NODE_CAP);
+
+    // t0 must be present (it has an issue)
+    expect(result.graph.nodes.some(n => n.id === 't0')).toBe(true);
+
+    // total nodes in full graph should exceed NODE_CAP
+    expect(result.totalNodes).toBeGreaterThan(NODE_CAP);
+  });
+
+  it('should report correct totalNodes regardless of cap', () => {
+    const nodeCount = NODE_CAP + 10;
+    const { edges, relatedMap } = buildLargeChainGraph(nodeCount);
+    const fkGraph = makeMockFKGraph(edges, relatedMap);
+
+    const context: AnalysisContext = {
+      fkGraph,
+      tableInfos: new Map(),
+      issues: [],
+    };
+
+    const issues: Issue[] = [makeIssue({ tableName: 't0', severity: 'error' })];
+
+    const result = buildGraphFromContext(context, issues, false);
+
+    // totalNodes is the real count before capping
+    expect(result.totalNodes).toBe(nodeCount);
   });
 });

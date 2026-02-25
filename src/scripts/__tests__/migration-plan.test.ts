@@ -8,6 +8,7 @@ import { describe, it, expect } from 'vitest';
 import { generateMigrationPlan } from '../migration-plan/plan-generator';
 import { computeExecutionOrder } from '../migration-plan/execution-order';
 import { generateRollbackEntry } from '../migration-plan/rollback-generator';
+import { resolveFixOption } from '../migration-plan/fix-resolver';
 import { renderPlanAsMarkdown, renderPlanAsSQL, renderPlanAsHTML } from '../migration-plan/plan-renderer';
 import { analyzeCharsetCascade } from '../analysis/charset-cascade';
 import { FKGraphBuilder } from '../analysis/fk-graph';
@@ -696,5 +697,160 @@ describe('FK toggle composition', () => {
 
     const allSQL = prepPhase!.steps.map(s => s.sql ?? '').join('\n');
     expect(allSQL).not.toContain('FOREIGN_KEY_CHECKS = 0');
+  });
+});
+
+// ============================================================================
+// resolveFixOption — shared fix-resolver consistency
+// ============================================================================
+
+describe('resolveFixOption', () => {
+  it('should return the recommended option when it has SQL', () => {
+    const options: FixOption[] = [
+      makeFixOption({ isRecommended: false, sqlTemplate: 'SELECT 1', reversibility: 'reversible' }),
+      makeFixOption({ isRecommended: true, sqlTemplate: 'ALTER TABLE t ...', reversibility: 'reversible' }),
+    ];
+
+    const resolved = resolveFixOption(options);
+    expect(resolved).not.toBeUndefined();
+    expect(resolved!.isRecommended).toBe(true);
+    expect(resolved!.sqlTemplate).toBe('ALTER TABLE t ...');
+  });
+
+  it('should fall back to the first option with SQL when recommended has no SQL', () => {
+    const options: FixOption[] = [
+      makeFixOption({ isRecommended: true, sqlTemplate: null, reversibility: 'manual_only' }),
+      makeFixOption({ isRecommended: false, sqlTemplate: 'ALTER TABLE t CONVERT ...', reversibility: 'reversible' }),
+    ];
+
+    const resolved = resolveFixOption(options);
+    expect(resolved).not.toBeUndefined();
+    expect(resolved!.isRecommended).toBe(false);
+    expect(resolved!.sqlTemplate).toBe('ALTER TABLE t CONVERT ...');
+  });
+
+  it('should return undefined when no option has SQL', () => {
+    const options: FixOption[] = [
+      makeFixOption({ isRecommended: true, sqlTemplate: null, reversibility: 'manual_only' }),
+      makeFixOption({ isRecommended: false, sqlTemplate: null, reversibility: 'manual_only' }),
+    ];
+
+    const resolved = resolveFixOption(options);
+    expect(resolved).toBeUndefined();
+  });
+
+  it('should return undefined for empty array', () => {
+    expect(resolveFixOption([])).toBeUndefined();
+  });
+
+  it('should return undefined for undefined input', () => {
+    expect(resolveFixOption(undefined)).toBeUndefined();
+  });
+});
+
+// ============================================================================
+// Execution SQL and rollback SQL consistency
+// ============================================================================
+
+describe('Execution SQL and rollback SQL consistency', () => {
+  it('when recommended option has SQL, both plan execution step and rollback use it', () => {
+    const recommendedSQL = 'ALTER TABLE `users` CONVERT TO CHARACTER SET utf8mb4;';
+    const nonRecommendedSQL = 'ALTER TABLE `users` MODIFY ...;';
+
+    const issue = makeIssue({
+      tableName: 'users',
+      fixOptions: [
+        makeFixOption({
+          isRecommended: false,
+          sqlTemplate: nonRecommendedSQL,
+          reversibility: 'manual_only',
+          rollbackTemplate: null,
+        }),
+        makeFixOption({
+          isRecommended: true,
+          sqlTemplate: recommendedSQL,
+          reversibility: 'reversible',
+          rollbackTemplate: 'ALTER TABLE `users` CONVERT TO CHARACTER SET utf8mb3;',
+        }),
+      ],
+    });
+
+    // Plan execution step must use recommended SQL
+    const plan = generateMigrationPlan([issue], null);
+    const execStep = plan.phases[2].steps[0];
+    expect(execStep).toBeDefined();
+    expect(execStep.sql).toBe(recommendedSQL);
+
+    // Rollback entry must reference the same recommended option
+    const rollback = generateRollbackEntry(issue);
+    expect(rollback).not.toBeNull();
+    expect(rollback!.fixSQL).toBe(recommendedSQL);
+    expect(rollback!.reversibility).toBe('reversible');
+  });
+
+  it('when recommended has no SQL, both plan and rollback use the same fallback option', () => {
+    const fallbackSQL = 'ALTER TABLE `orders` CONVERT TO CHARACTER SET utf8mb4;';
+
+    const issue = makeIssue({
+      tableName: 'orders',
+      fixOptions: [
+        makeFixOption({
+          isRecommended: true,
+          sqlTemplate: null,
+          reversibility: 'manual_only',
+          rollbackTemplate: null,
+          label: 'Manual fix',
+        }),
+        makeFixOption({
+          isRecommended: false,
+          sqlTemplate: fallbackSQL,
+          reversibility: 'reversible',
+          rollbackTemplate: 'ALTER TABLE `orders` CONVERT TO CHARACTER SET utf8mb3;',
+          label: 'Auto fix',
+        }),
+      ],
+    });
+
+    // Plan must use the fallback SQL (first option that has sqlTemplate)
+    const plan = generateMigrationPlan([issue], null);
+    const execStep = plan.phases[2].steps[0];
+    expect(execStep).toBeDefined();
+    expect(execStep.sql).toBe(fallbackSQL);
+
+    // Rollback must also be generated from the same fallback option
+    const rollback = generateRollbackEntry(issue);
+    expect(rollback).not.toBeNull();
+    expect(rollback!.fixSQL).toBe(fallbackSQL);
+    expect(rollback!.reversibility).toBe('reversible');
+  });
+
+  it('resolved option is identical between plan-generator and rollback-generator', () => {
+    // Directly compare resolveFixOption result vs what plan and rollback use
+    const fixOptions: FixOption[] = [
+      makeFixOption({
+        isRecommended: true,
+        sqlTemplate: null,
+        reversibility: 'manual_only',
+      }),
+      makeFixOption({
+        isRecommended: false,
+        sqlTemplate: 'ALTER TABLE `t` ENGINE = InnoDB;',
+        reversibility: 'partially_reversible',
+        rollbackTemplate: null,
+      }),
+    ];
+
+    const issue = makeIssue({ tableName: 't', fixOptions });
+
+    const resolvedOption = resolveFixOption(fixOptions);
+    expect(resolvedOption).not.toBeUndefined();
+
+    const plan = generateMigrationPlan([issue], null);
+    const execStep = plan.phases[2].steps[0];
+    expect(execStep.sql).toBe(resolvedOption!.sqlTemplate);
+
+    const rollback = generateRollbackEntry(issue);
+    expect(rollback!.fixSQL).toBe(resolvedOption!.sqlTemplate);
+    expect(rollback!.reversibility).toBe(resolvedOption!.reversibility);
   });
 });

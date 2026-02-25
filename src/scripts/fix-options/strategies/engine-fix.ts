@@ -5,10 +5,12 @@
 
 import type { FixOption } from '../../domain/fix-option';
 import type { Issue } from '../../types';
+import { escapeIdentifier } from '../../security/sql-escape';
 
 export function generateEngineFixOptions(issue: Issue): FixOption[] {
   const table = issue.tableName ?? 'unknown';
   const currentEngine = issue.matchedText ?? 'MyISAM';
+  const escapedTable = escapeIdentifier(table);
 
   const options: FixOption[] = [];
 
@@ -17,13 +19,13 @@ export function generateEngineFixOptions(issue: Issue): FixOption[] {
     strategy: 'engine_convert',
     label: 'InnoDB로 변환',
     description: `${currentEngine} 엔진을 InnoDB로 변환합니다. 트랜잭션 지원, 행 수준 잠금 등 향상.`,
-    sqlTemplate: `ALTER TABLE \`${table}\` ENGINE=InnoDB;`,
+    sqlTemplate: `ALTER TABLE ${escapedTable} ENGINE=InnoDB;`,
     isRecommended: false,
     effort: 'medium',
     risk: 'medium',
     impact: '대용량 테이블의 경우 변환에 시간 소요. FULLTEXT 인덱스 동작이 약간 다를 수 있음.',
     reversibility: 'reversible',
-    rollbackTemplate: `ALTER TABLE \`${table}\` ENGINE=${currentEngine};`,
+    rollbackTemplate: `ALTER TABLE ${escapedTable} ENGINE=${currentEngine};`,
   });
 
   // Option B: Skip (keep current engine)

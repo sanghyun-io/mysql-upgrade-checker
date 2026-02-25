@@ -5,11 +5,14 @@
 
 import type { FixOption } from '../../domain/fix-option';
 import type { Issue } from '../../types';
+import { escapeIdentifier } from '../../security/sql-escape';
 
 export function generateDateFixOptions(issue: Issue): FixOption[] {
   const table = issue.tableName ?? 'unknown';
   const column = issue.columnName ?? 'unknown';
   const isNullable = issue.columnContext?.nullable ?? false;
+  const escapedTable = escapeIdentifier(table);
+  const escapedColumn = escapeIdentifier(column);
 
   const options: FixOption[] = [];
 
@@ -19,7 +22,7 @@ export function generateDateFixOptions(issue: Issue): FixOption[] {
       strategy: 'date_to_null',
       label: 'NULL로 변환',
       description: `'0000-00-00' 값을 NULL로 변환합니다. 컬럼이 nullable이므로 안전합니다.`,
-      sqlTemplate: `UPDATE \`${table}\` SET \`${column}\` = NULL WHERE \`${column}\` = '0000-00-00';`,
+      sqlTemplate: `UPDATE ${escapedTable} SET ${escapedColumn} = NULL WHERE ${escapedColumn} = '0000-00-00';`,
       isRecommended: false, // recommender에서 결정
       effort: 'low',
       risk: 'low',
@@ -36,7 +39,7 @@ export function generateDateFixOptions(issue: Issue): FixOption[] {
     strategy: 'date_to_min',
     label: '최소 유효 날짜로 변환',
     description: `'0000-00-00' 값을 MySQL 최소 유효 날짜 '${minDate}'로 변환합니다.`,
-    sqlTemplate: `UPDATE \`${table}\` SET \`${column}\` = '${minDate}' WHERE \`${column}\` = '0000-00-00';`,
+    sqlTemplate: `UPDATE ${escapedTable} SET ${escapedColumn} = '${minDate}' WHERE ${escapedColumn} = '0000-00-00';`,
     isRecommended: false,
     effort: 'low',
     risk: 'low',
@@ -50,7 +53,7 @@ export function generateDateFixOptions(issue: Issue): FixOption[] {
     strategy: 'date_to_custom',
     label: '사용자 지정 날짜로 변환',
     description: `비즈니스 로직에 맞는 날짜를 직접 지정합니다.`,
-    sqlTemplate: `-- 사용자 지정 날짜로 변환:\nUPDATE \`${table}\` SET \`${column}\` = 'YYYY-MM-DD' WHERE \`${column}\` = '0000-00-00';`,
+    sqlTemplate: `-- 사용자 지정 날짜로 변환:\nUPDATE ${escapedTable} SET ${escapedColumn} = 'YYYY-MM-DD' WHERE ${escapedColumn} = '0000-00-00';`,
     isRecommended: false,
     effort: 'medium',
     risk: 'low',

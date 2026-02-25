@@ -19,7 +19,13 @@ export interface OrderedFixGroup {
 
 /**
  * Group issues by table and order them using FK topological sort.
- * Tables without FK relationships come last (alphabetical).
+ *
+ * Ordering is determined by getTopologicalOrder(): Kahn's algorithm with
+ * alphabetical tie-breaking within each BFS layer. Tables involved in
+ * circular FK dependencies (cycle members) are placed after all acyclic
+ * tables, grouped by SCC and sorted alphabetically within each SCC group.
+ * Tables without any FK relationships (not present in the FK graph) are
+ * appended last, in the order they were inserted (byTable key order).
  */
 export function computeExecutionOrder(
   issues: Issue[],

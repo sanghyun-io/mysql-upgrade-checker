@@ -30,10 +30,13 @@ export function renderSVG(layout: LayoutResult): string {
   lines.push('</defs>');
   lines.push(renderStyles());
 
+  // Build node lookup map once — O(N) instead of O(E*N) with nodes.find per edge
+  const nodeMap = new Map(nodes.map(n => [n.id, n]));
+
   // Render edges first (below nodes)
   lines.push('<g class="edges">');
   for (const edge of edges) {
-    lines.push(renderEdge(edge, nodes));
+    lines.push(renderEdge(edge, nodeMap));
   }
   lines.push('</g>');
 
@@ -91,9 +94,9 @@ function renderNode(node: LayoutNode): string {
 </g>`;
 }
 
-function renderEdge(edge: LayoutEdge, nodes: LayoutNode[]): string {
-  const fromNode = nodes.find(n => n.id === edge.from);
-  const toNode = nodes.find(n => n.id === edge.to);
+function renderEdge(edge: LayoutEdge, nodeMap: Map<string, LayoutNode>): string {
+  const fromNode = nodeMap.get(edge.from);
+  const toNode = nodeMap.get(edge.to);
 
   if (!fromNode || !toNode) return '';
 

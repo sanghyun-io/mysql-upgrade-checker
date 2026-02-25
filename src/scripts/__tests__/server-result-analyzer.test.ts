@@ -320,15 +320,17 @@ describe('getPreflightSummary', () => {
     expect(summary.allRequiredPassed).toBe(true);
   });
 
-  it('should count skipped items as completed', () => {
+  it('should count skipped items in completed tally but not satisfy allRequiredPassed for required items', () => {
     const items: PreflightItem[] = [
       { id: 'a', title: '', description: '', required: true, query: null, status: 'skipped' },
       { id: 'b', title: '', description: '', required: false, query: null, status: 'skipped' },
     ];
 
     const summary = getPreflightSummary(items);
+    // Both items count toward 'completed' for UX progress display
     expect(summary.completed).toBe(2);
-    expect(summary.allRequiredPassed).toBe(true);
+    // A required item with status 'skipped' does NOT satisfy the safety gate
+    expect(summary.allRequiredPassed).toBe(false);
   });
 
   it('should handle empty checklist', () => {

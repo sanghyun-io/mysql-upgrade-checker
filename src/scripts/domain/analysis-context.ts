@@ -40,13 +40,17 @@ export interface IFKGraphBuilder {
 
 /**
  * Immutable analysis context shared across all post-analysis modules.
+ *
+ * All properties are readonly. tableInfos is a defensive copy (new Map) so
+ * callers cannot mutate internal analyzer state. fkGraph exposes only
+ * read methods via IFKGraphBuilder interface.
  */
 export interface AnalysisContext {
-  /** FK dependency graph (built once, immutable) */
-  readonly fkGraph: IFKGraphBuilder;
+  /** FK dependency graph (built once, read-only interface) */
+  readonly fkGraph: Readonly<IFKGraphBuilder>;
 
-  /** All parsed table information keyed by table name */
-  readonly tableInfos: Map<string, TableInfo>;
+  /** All parsed table information keyed by table name (defensive copy, treat as read-only) */
+  readonly tableInfos: ReadonlyMap<string, Readonly<TableInfo>>;
 
   /** All detected issues */
   readonly issues: ReadonlyArray<Issue>;
