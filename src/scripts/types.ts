@@ -3,6 +3,8 @@
  * Based on MySQL Shell util.checkForServerUpgrade() official 47 checks
  */
 
+import type { FixOption } from './domain/fix-option';
+
 // ============================================================================
 // SEVERITY LEVELS
 // ============================================================================
@@ -102,6 +104,9 @@ export interface CompatibilityRule {
 
   // Fix query generation
   generateFixQuery?: (context: FixQueryContext) => string | null;
+
+  // Multi-option fix generation (Task 3, optional - backward compatible)
+  generateFixOptions?: (context: FixQueryContext) => FixOption[];
 }
 
 // ============================================================================
@@ -148,6 +153,23 @@ export interface Issue {
 
   // Fix
   fixQuery?: string | null;
+
+  // Multi-option fix strategies (Task 3)
+  fixOptions?: FixOption[];
+
+  // FK context (Task 2: Context-Aware Analysis)
+  fkContext?: {
+    relatedTables: string[];
+    isChildTable: boolean;
+    hasCycle?: boolean;
+    missingReference?: boolean;
+  };
+
+  // Column context for smart fix recommendation (Task 2)
+  columnContext?: {
+    nullable: boolean;
+    hasDefault: boolean;
+  };
 
   // MySQL Shell reference
   mysqlShellCheckId?: string;
