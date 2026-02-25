@@ -5,7 +5,7 @@
 
 import type { FixOption } from '../../domain/fix-option';
 import type { Issue } from '../../types';
-import { escapeIdentifier, escapeStringValue } from '../../security/sql-escape';
+import { escapeStringValue } from '../../security/sql-escape';
 
 /**
  * Parse a MySQL account name into user and host parts.
@@ -29,7 +29,7 @@ export function parseUserHost(userName: string): { user: string; host: string } 
 export function generateAuthFixOptions(issue: Issue): FixOption[] {
   const userName = issue.userName ?? 'unknown';
   const { user, host } = parseUserHost(userName);
-  const escapedUser = escapeIdentifier(user);
+  const escapedUser = escapeStringValue(user);
   const escapedHost = escapeStringValue(host);
   const userAtHost = `${escapedUser}@${escapedHost}`;
 

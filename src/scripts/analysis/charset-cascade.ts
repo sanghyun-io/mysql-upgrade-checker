@@ -31,9 +31,10 @@ export interface CharsetMismatch {
  */
 function resolveCharset(
   table: TableInfo,
-  columnName: string
+  columnName: string,
+  colMap: Map<string, TableInfo['columns'][number]>
 ): { charset: string; collation?: string } {
-  const col = table.columns.find(c => c.name.toLowerCase() === columnName.toLowerCase());
+  const col = colMap.get(columnName.toLowerCase());
 
   if (col?.charset) {
     return { charset: normalizeCharset(col.charset), collation: col.collation?.toLowerCase() };
@@ -145,8 +146,8 @@ export function analyzeCharsetCascade(
       const parentColMissing = !parentColInfo;
       if (childColMissing && parentColMissing) continue;
 
-      const childCharsetInfo = resolveCharset(childTable, childColName);
-      const parentCharsetInfo = resolveCharset(parentTable, parentColName);
+      const childCharsetInfo = resolveCharset(childTable, childColName, childColMap);
+      const parentCharsetInfo = resolveCharset(parentTable, parentColName, parentColMap);
 
       // Collect charset mismatch
       if (childCharsetInfo.charset !== parentCharsetInfo.charset) {

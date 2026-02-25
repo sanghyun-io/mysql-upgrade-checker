@@ -383,14 +383,14 @@ describe('SQL injection regression tests — strategy files', () => {
       expect(minOpt?.sqlTemplate).toContain('`created_at`');
     });
 
-    it('auth-fix with normal user produces ALTER USER with backtick-wrapped user', () => {
+    it('auth-fix with normal user produces ALTER USER with single-quoted user', () => {
       const issue = makeIssue({
         id: 'mysql_native_password',
         userName: 'app_user',
       });
       const options = generateFixOptions(issue);
       const authOpt = options.find(o => o.strategy === 'auth_change');
-      expect(authOpt?.sqlTemplate).toContain('`app_user`');
+      expect(authOpt?.sqlTemplate).toContain("'app_user'@'%'");
     });
   });
 });

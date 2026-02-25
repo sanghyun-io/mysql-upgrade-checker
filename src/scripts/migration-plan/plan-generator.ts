@@ -14,6 +14,7 @@ import type { RollbackEntry } from './rollback-generator';
 import type { OrderedFixGroup } from './execution-order';
 import { createPreflightChecklist } from '../analysis/preflight';
 import { resolveFixOption } from './fix-resolver';
+import { escapeIdentifier } from '../security/sql-escape';
 
 // ============================================================================
 // Plan Data Types
@@ -219,7 +220,7 @@ function generateValidationPhase(groups: OrderedFixGroup[], summary: PlanSummary
 
   if (tables.length > 0) {
     // CHECK TABLE for all affected tables
-    const checkSQL = tables.map(t => `CHECK TABLE \`${t}\` EXTENDED;`).join('\n');
+    const checkSQL = tables.map(t => `CHECK TABLE ${escapeIdentifier(t)} EXTENDED;`).join('\n');
     steps.push({
       order: order++,
       title: '테이블 무결성 검사',

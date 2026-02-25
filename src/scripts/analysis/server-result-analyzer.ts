@@ -354,32 +354,41 @@ function analyzeUserAuthResult(result: ServerQueryResult): Issue[] {
     const userHost = `${userName}@${host}`;
 
     if (AUTH_PLUGINS.disabled.includes(authPlugin as typeof AUTH_PLUGINS.disabled[number])) {
-      issues.push(makeIssue(
-        'server_auth_plugin_disabled',
-        'error',
-        `비활성화된 인증 플러그인: ${authPlugin}`,
-        `사용자 '${userHost}'가 MySQL 8.4에서 기본 비활성화된 '${authPlugin}' 플러그인을 사용합니다.`,
-        `ALTER USER '${userName}'@'${host}' IDENTIFIED WITH caching_sha2_password BY '<new_password>'; 를 실행하세요.`,
-        authPlugin,
-      ));
+      issues.push({
+        ...makeIssue(
+          authPlugin, // Use the plugin name as issue ID (e.g., 'mysql_native_password')
+          'error',
+          `비활성화된 인증 플러그인: ${authPlugin}`,
+          `사용자 '${userHost}'가 MySQL 8.4에서 기본 비활성화된 '${authPlugin}' 플러그인을 사용합니다.`,
+          `ALTER USER '${userName}'@'${host}' IDENTIFIED WITH caching_sha2_password BY '<new_password>'; 를 실행하세요.`,
+          authPlugin,
+        ),
+        userName: userHost,
+      });
     } else if ((AUTH_PLUGINS.removed as readonly string[]).includes(authPlugin)) {
-      issues.push(makeIssue(
-        'server_auth_plugin_removed',
-        'error',
-        `제거된 인증 플러그인: ${authPlugin}`,
-        `사용자 '${userHost}'가 MySQL 8.4에서 제거된 '${authPlugin}' 플러그인을 사용합니다.`,
-        `ALTER USER '${userName}'@'${host}' IDENTIFIED WITH caching_sha2_password BY '<new_password>'; 를 실행하세요.`,
-        authPlugin,
-      ));
+      issues.push({
+        ...makeIssue(
+          authPlugin, // Use the plugin name as issue ID (e.g., 'authentication_fido')
+          'error',
+          `제거된 인증 플러그인: ${authPlugin}`,
+          `사용자 '${userHost}'가 MySQL 8.4에서 제거된 '${authPlugin}' 플러그인을 사용합니다.`,
+          `ALTER USER '${userName}'@'${host}' IDENTIFIED WITH caching_sha2_password BY '<new_password>'; 를 실행하세요.`,
+          authPlugin,
+        ),
+        userName: userHost,
+      });
     } else if (AUTH_PLUGINS.deprecated.includes(authPlugin as typeof AUTH_PLUGINS.deprecated[number])) {
-      issues.push(makeIssue(
-        'server_auth_plugin_deprecated',
-        'warning',
-        `폐기 예정 인증 플러그인: ${authPlugin}`,
-        `사용자 '${userHost}'가 폐기 예정인 '${authPlugin}' 플러그인을 사용합니다.`,
-        `ALTER USER '${userName}'@'${host}' IDENTIFIED WITH caching_sha2_password BY '<new_password>'; 로 마이그레이션하세요.`,
-        authPlugin,
-      ));
+      issues.push({
+        ...makeIssue(
+          authPlugin, // Use the plugin name as issue ID (e.g., 'sha256_password')
+          'warning',
+          `폐기 예정 인증 플러그인: ${authPlugin}`,
+          `사용자 '${userHost}'가 폐기 예정인 '${authPlugin}' 플러그인을 사용합니다.`,
+          `ALTER USER '${userName}'@'${host}' IDENTIFIED WITH caching_sha2_password BY '<new_password>'; 로 마이그레이션하세요.`,
+          authPlugin,
+        ),
+        userName: userHost,
+      });
     }
   }
 

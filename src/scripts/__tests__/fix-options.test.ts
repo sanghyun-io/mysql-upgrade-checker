@@ -180,7 +180,7 @@ describe('generateFixOptions', () => {
       });
 
       const options = generateFixOptions(issue);
-      expect(options[0].sqlTemplate).toContain('`app_user`@\'localhost\'');
+      expect(options[0].sqlTemplate).toContain("'app_user'@'localhost'");
       expect(options[0].sqlTemplate).not.toContain("@'%'");
     });
 
@@ -191,7 +191,7 @@ describe('generateFixOptions', () => {
       });
 
       const options = generateFixOptions(issue);
-      expect(options[0].sqlTemplate).toContain('`admin`@\'10.0.0.1\'');
+      expect(options[0].sqlTemplate).toContain("'admin'@'10.0.0.1'");
       expect(options[0].sqlTemplate).not.toContain("@'%'");
     });
 
@@ -202,7 +202,7 @@ describe('generateFixOptions', () => {
       });
 
       const options = generateFixOptions(issue);
-      expect(options[0].sqlTemplate).toContain("`app_user`@'%'");
+      expect(options[0].sqlTemplate).toContain("'app_user'@'%'");
     });
 
     it('should apply correct host to rollbackTemplate as well', () => {
@@ -213,7 +213,7 @@ describe('generateFixOptions', () => {
 
       const options = generateFixOptions(issue);
       const authChangeOpt = options.find(o => o.strategy === 'auth_change');
-      expect(authChangeOpt?.rollbackTemplate).toContain('`app_user`@\'10.0.0.1\'');
+      expect(authChangeOpt?.rollbackTemplate).toContain("'app_user'@'10.0.0.1'");
       expect(authChangeOpt?.rollbackTemplate).not.toContain("@'%'");
     });
   });

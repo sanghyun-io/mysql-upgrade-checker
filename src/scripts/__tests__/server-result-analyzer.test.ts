@@ -456,8 +456,8 @@ describe('analyzeServerResult - COMBINED (check_type)', () => {
       "user_auth\tbob\t%\tsha256_password\tN\tN",
     ].join('\n');
     const issues = analyzeServerResult(tsv);
-    expect(issues.some(i => i.id === 'server_auth_plugin_disabled')).toBe(true);
-    expect(issues.some(i => i.id === 'server_auth_plugin_deprecated')).toBe(true);
+    expect(issues.some(i => i.id === 'mysql_native_password')).toBe(true);
+    expect(issues.some(i => i.id === 'sha256_password')).toBe(true);
   });
 
   it('should detect removed auth plugin from user_auth rows', () => {
@@ -466,7 +466,7 @@ describe('analyzeServerResult - COMBINED (check_type)', () => {
       'user_auth\tcharlie\t%\tauthentication_fido',
     ].join('\n');
     const issues = analyzeServerResult(tsv);
-    expect(issues.some(i => i.id === 'server_auth_plugin_removed')).toBe(true);
+    expect(issues.some(i => i.id === 'authentication_fido')).toBe(true);
   });
 
   it('should detect removed system variables from sys_vars check_type rows', () => {
@@ -491,7 +491,7 @@ describe('analyzeServerResult - COMBINED (check_type)', () => {
     ].join('\n');
     const issues = analyzeServerResult(tsv);
     // Both auth and sysvar issues should be present
-    expect(issues.some(i => i.id === 'server_auth_plugin_disabled')).toBe(true);
+    expect(issues.some(i => i.id === 'mysql_native_password')).toBe(true);
     expect(issues.some(i => i.id === 'server_removed_variable')).toBe(true);
   });
 
@@ -523,22 +523,25 @@ describe('analyzeServerResult - user_name/auth_plugin rows', () => {
   it('should detect mysql_native_password as disabled', () => {
     const tsv = 'user_name\thost\tauth_plugin\nroot\tlocalhost\tmysql_native_password';
     const issues = analyzeServerResult(tsv);
-    expect(issues.some(i => i.id === 'server_auth_plugin_disabled')).toBe(true);
-    expect(issues.find(i => i.id === 'server_auth_plugin_disabled')?.severity).toBe('error');
+    expect(issues.some(i => i.id === 'mysql_native_password')).toBe(true);
+    expect(issues.find(i => i.id === 'mysql_native_password')?.severity).toBe('error');
+    expect(issues.find(i => i.id === 'mysql_native_password')?.userName).toBe('root@localhost');
   });
 
   it('should detect sha256_password as deprecated', () => {
     const tsv = 'user_name\thost\tauth_plugin\ndave\t%\tsha256_password';
     const issues = analyzeServerResult(tsv);
-    expect(issues.some(i => i.id === 'server_auth_plugin_deprecated')).toBe(true);
-    expect(issues.find(i => i.id === 'server_auth_plugin_deprecated')?.severity).toBe('warning');
+    expect(issues.some(i => i.id === 'sha256_password')).toBe(true);
+    expect(issues.find(i => i.id === 'sha256_password')?.severity).toBe('warning');
+    expect(issues.find(i => i.id === 'sha256_password')?.userName).toBe('dave@%');
   });
 
   it('should detect authentication_fido as removed', () => {
     const tsv = 'user_name\thost\tauth_plugin\nfidouser\t%\tauthentication_fido';
     const issues = analyzeServerResult(tsv);
-    expect(issues.some(i => i.id === 'server_auth_plugin_removed')).toBe(true);
-    expect(issues.find(i => i.id === 'server_auth_plugin_removed')?.severity).toBe('error');
+    expect(issues.some(i => i.id === 'authentication_fido')).toBe(true);
+    expect(issues.find(i => i.id === 'authentication_fido')?.severity).toBe('error');
+    expect(issues.find(i => i.id === 'authentication_fido')?.userName).toBe('fidouser@%');
   });
 
   it('should not flag caching_sha2_password users', () => {
