@@ -20,7 +20,7 @@ import type {
   ZerofillColumnMap
 } from './types';
 import { compatibilityRules } from './rules';
-import { REMOVED_SYS_VARS_84, SYS_VARS_NEW_DEFAULTS_84, CHANGED_FUNCTIONS_IN_GENERATED_COLUMNS, NEW_RESERVED_KEYWORDS_84 } from './constants';
+import { REMOVED_SYS_VARS_84, CHANGED_FUNCTIONS_IN_GENERATED_COLUMNS, NEW_RESERVED_KEYWORDS_84 } from './constants';
 import { parseCreateTable } from './parsers/table-parser';
 import { extractUsers } from './parsers/user-parser';
 import { FKGraphBuilder } from './analysis/fk-graph';
@@ -2235,123 +2235,9 @@ export class FileAnalyzer {
   // ==========================================================================
   // SERVER QUERY RESULT ANALYSIS
   // ==========================================================================
-
-  /**
-   * Analyze server query result based on check ID
-   */
-  analyzeServerQueryResult(checkId: string, result: { columns: string[]; rows: Record<string, string | number | null>[] }): Issue[] {
-    switch (checkId) {
-      case 'checkSysVarDefaults':
-        return this.analyzeSysVarDefaults(result);
-      case 'authMethodUsage':
-      case 'deprecatedDefaultAuth':
-      case 'pluginUsage':
-        return this.analyzeUserAuthPlugins(result);
-      default:
-        return [];
-    }
-  }
-
-  /**
-   * Analyze user authentication plugins from server query result
-   */
-  analyzeUserAuthPlugins(result: { columns: string[]; rows: Record<string, string | number | null>[] }): Issue[] {
-    const issues: Issue[] = [];
-
-    for (const row of result.rows) {
-      const userName = row.User || row.user_name || row.user;
-      const host = row.Host || row.host;
-      const plugin = row.plugin || row.auth_plugin;
-
-      if (!userName || !plugin) continue;
-
-      const userHost = `${userName}@${host}`;
-
-      // Check for mysql_native_password
-      if (plugin === 'mysql_native_password') {
-        const rule = compatibilityRules.find(r => r.id === 'mysql_native_password');
-        if (rule) {
-          issues.push({
-            ...rule,
-            location: `mysql.user: ${userHost}`,
-            code: `IDENTIFIED WITH ${plugin}`,
-            userName: String(userName),
-            fixQuery: rule.generateFixQuery?.({ userName: String(userName) }) || null
-          });
-        }
-      }
-
-      // Check for sha256_password
-      if (plugin === 'sha256_password') {
-        const rule = compatibilityRules.find(r => r.id === 'sha256_password');
-        if (rule) {
-          issues.push({
-            ...rule,
-            location: `mysql.user: ${userHost}`,
-            code: `IDENTIFIED WITH ${plugin}`,
-            userName: String(userName)
-          });
-        }
-      }
-
-      // Check for authentication_fido
-      if (plugin && String(plugin).includes('authentication_fido')) {
-        const rule = compatibilityRules.find(r => r.id === 'authentication_fido');
-        if (rule) {
-          issues.push({
-            ...rule,
-            location: `mysql.user: ${userHost}`,
-            code: `IDENTIFIED WITH ${plugin}`,
-            userName: String(userName)
-          });
-        }
-      }
-    }
-
-    return issues;
-  }
-
-  /**
-   * Analyze system variable default values from server query result
-   */
-  analyzeSysVarDefaults(result: { columns: string[]; rows: Record<string, string | number | null>[] }): Issue[] {
-    const issues: Issue[] = [];
-
-    for (const row of result.rows) {
-      const varName = String(row.VARIABLE_NAME || row.variable_name || '');
-      const varValue = row.VARIABLE_VALUE || row.variable_value;
-
-      if (!varName || varValue === null) continue;
-
-      // Check if this variable has a new default in 8.4
-      const varConfig = SYS_VARS_NEW_DEFAULTS_84[varName as keyof typeof SYS_VARS_NEW_DEFAULTS_84];
-      if (!varConfig) continue;
-
-      const [oldDefault, newDefault, _description] = varConfig;
-      const currentValue = String(varValue);
-
-      // If current value matches old default, it will change after upgrade
-      const matchesOldDefault =
-        (oldDefault === null && currentValue === '') ||
-        String(oldDefault).toLowerCase() === currentValue.toLowerCase();
-
-      if (matchesOldDefault) {
-        issues.push({
-          id: 'sysvar_new_default',
-          type: 'config',
-          category: 'newDefaultVars',
-          severity: 'warning',
-          title: `${varName} 기본값 변경`,
-          description: `시스템 변수 '${varName}'의 현재 값이 8.0 기본값(${oldDefault})입니다. 8.4 업그레이드 후 기본값이 ${newDefault}로 변경됩니다.`,
-          suggestion: `업그레이드 후 동작 변경을 원하지 않는다면, 설정 파일에 명시적으로 '${varName} = ${oldDefault}'를 추가하세요.`,
-          location: 'performance_schema.global_variables',
-          variableName: varName,
-          code: `${varName} = ${currentValue} (8.0 default: ${oldDefault}, 8.4 default: ${newDefault})`,
-          mysqlShellCheckId: 'sysVarsNewDefaults'
-        });
-      }
-    }
-
-    return issues;
-  }
+  // NOTE: Server result analysis has been moved to
+  // src/scripts/analysis/server-result-analyzer.ts (analyzeServerResult).
+  // The legacy methods below have been removed to eliminate dead code.
+  // Use analyzeServerResult() from that module for all server result analysis.
+  // ==========================================================================
 }

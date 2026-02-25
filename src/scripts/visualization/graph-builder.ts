@@ -110,8 +110,16 @@ export function buildGraphFromContext(
     const reducedSet = new Set<string>();
     for (const table of seedTables) {
       reducedSet.add(table);
-      for (const p of fkGraph.getParents(table)) reducedSet.add(p);
-      for (const c of fkGraph.getChildren(table)) reducedSet.add(c);
+      if (reducedSet.size >= NODE_CAP) break;
+      for (const p of fkGraph.getParents(table)) {
+        reducedSet.add(p);
+        if (reducedSet.size >= NODE_CAP) break;
+      }
+      if (reducedSet.size >= NODE_CAP) break;
+      for (const c of fkGraph.getChildren(table)) {
+        reducedSet.add(c);
+        if (reducedSet.size >= NODE_CAP) break;
+      }
       if (reducedSet.size >= NODE_CAP) break;
     }
     includedTables = reducedSet;

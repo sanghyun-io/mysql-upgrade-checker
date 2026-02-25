@@ -401,3 +401,143 @@ describe('case-insensitive row key handling', () => {
     expect(Array.isArray(issues)).toBe(true);
   });
 });
+
+// ============================================================================
+// Combined result (check_type column) — Issue #2
+// ============================================================================
+
+describe('analyzeServerResult - COMBINED (check_type)', () => {
+  it('should detect auth issues from user_auth check_type rows', () => {
+    const tsv = [
+      'check_type\tuser_name\thost\tauth_plugin\tpassword_expired\taccount_locked',
+      "user_auth\talice\t%\tmysql_native_password\tN\tN",
+      "user_auth\tbob\t%\tsha256_password\tN\tN",
+    ].join('\n');
+    const issues = analyzeServerResult(tsv);
+    expect(issues.some(i => i.id === 'server_auth_plugin_disabled')).toBe(true);
+    expect(issues.some(i => i.id === 'server_auth_plugin_deprecated')).toBe(true);
+  });
+
+  it('should detect removed auth plugin from user_auth rows', () => {
+    const tsv = [
+      'check_type\tuser_name\thost\tauth_plugin',
+      'user_auth\tcharlie\t%\tauthentication_fido',
+    ].join('\n');
+    const issues = analyzeServerResult(tsv);
+    expect(issues.some(i => i.id === 'server_auth_plugin_removed')).toBe(true);
+  });
+
+  it('should detect removed system variables from sys_vars check_type rows', () => {
+    const tsv = [
+      'check_type\tvar_name\tvar_value',
+      'sys_vars\tavoid_temporal_upgrade\tOFF',
+      'sys_vars\tsql_mode\tSTRICT_TRANS_TABLES,NO_AUTO_CREATE_USER',
+      'sys_vars\tinnodb_buffer_pool_size\t134217728',
+    ].join('\n');
+    const issues = analyzeServerResult(tsv);
+    expect(issues.some(i => i.id === 'server_removed_variable' && i.variableName === 'avoid_temporal_upgrade')).toBe(true);
+    expect(issues.some(i => i.id === 'server_deprecated_sql_mode')).toBe(true);
+    // innodb_buffer_pool_size is not removed — should not appear as removed_variable
+    expect(issues.filter(i => i.id === 'server_removed_variable').length).toBe(1);
+  });
+
+  it('should handle mixed check_type rows in one result set', () => {
+    const tsv = [
+      'check_type\tuser_name\thost\tauth_plugin\tvar_name\tvar_value',
+      'user_auth\talice\t%\tmysql_native_password\t\t',
+      'sys_vars\t\t\t\tavoid_temporal_upgrade\tOFF',
+    ].join('\n');
+    const issues = analyzeServerResult(tsv);
+    // Both auth and sysvar issues should be present
+    expect(issues.some(i => i.id === 'server_auth_plugin_disabled')).toBe(true);
+    expect(issues.some(i => i.id === 'server_removed_variable')).toBe(true);
+  });
+
+  it('should silently ignore unknown check_type values', () => {
+    const tsv = [
+      'check_type\ttablespace_name\tfile_name',
+      'tablespace_files\tinnodb_system\t/var/lib/mysql/ibdata1',
+    ].join('\n');
+    const issues = analyzeServerResult(tsv);
+    // tablespace_files rows are informational — no issues expected
+    expect(issues).toEqual([]);
+  });
+
+  it('should return empty for combined result with no matching rows', () => {
+    const tsv = [
+      'check_type\tuser_name\thost\tauth_plugin',
+    ].join('\n');
+    const issues = analyzeServerResult(tsv);
+    expect(issues).toEqual([]);
+  });
+});
+
+// ============================================================================
+// Auth plugin rows (standalone, no check_type) — Issue #4
+// ============================================================================
+
+describe('analyzeServerResult - user_name/auth_plugin rows', () => {
+  it('should detect mysql_native_password as disabled', () => {
+    const tsv = 'user_name\thost\tauth_plugin\nroot\tlocalhost\tmysql_native_password';
+    const issues = analyzeServerResult(tsv);
+    expect(issues.some(i => i.id === 'server_auth_plugin_disabled')).toBe(true);
+    expect(issues.find(i => i.id === 'server_auth_plugin_disabled')?.severity).toBe('error');
+  });
+
+  it('should detect sha256_password as deprecated', () => {
+    const tsv = 'user_name\thost\tauth_plugin\ndave\t%\tsha256_password';
+    const issues = analyzeServerResult(tsv);
+    expect(issues.some(i => i.id === 'server_auth_plugin_deprecated')).toBe(true);
+    expect(issues.find(i => i.id === 'server_auth_plugin_deprecated')?.severity).toBe('warning');
+  });
+
+  it('should detect authentication_fido as removed', () => {
+    const tsv = 'user_name\thost\tauth_plugin\nfidouser\t%\tauthentication_fido';
+    const issues = analyzeServerResult(tsv);
+    expect(issues.some(i => i.id === 'server_auth_plugin_removed')).toBe(true);
+    expect(issues.find(i => i.id === 'server_auth_plugin_removed')?.severity).toBe('error');
+  });
+
+  it('should not flag caching_sha2_password users', () => {
+    const tsv = 'user_name\thost\tauth_plugin\nadmin\tlocalhost\tcaching_sha2_password';
+    const issues = analyzeServerResult(tsv);
+    expect(issues.length).toBe(0);
+  });
+});
+
+// ============================================================================
+// MariaDB detection — Issue #3
+// ============================================================================
+
+describe('analyzeServerResult - MariaDB detection', () => {
+  it('should return a warning issue for MariaDB version string, not "upgrade safe"', () => {
+    const tsv = 'VERSION()\n10.11.6-MariaDB';
+    const issues = analyzeServerResult(tsv);
+    expect(issues.some(i => i.id === 'server_mariadb_detected')).toBe(true);
+    expect(issues.find(i => i.id === 'server_mariadb_detected')?.severity).toBe('warning');
+  });
+
+  it('should NOT produce server_version_compatible for MariaDB', () => {
+    const tsv = 'VERSION()\n10.4.0-MariaDB';
+    const issues = analyzeServerResult(tsv);
+    expect(issues.some(i => i.id === 'server_version_compatible')).toBe(false);
+    expect(issues.some(i => i.id === 'server_version_too_old')).toBe(false);
+  });
+
+  it('should NOT produce server_version_already_target for high-numbered MariaDB', () => {
+    const tsv = 'VERSION()\n11.2.0-MariaDB';
+    const issues = analyzeServerResult(tsv);
+    expect(issues.some(i => i.id === 'server_version_already_target')).toBe(false);
+    expect(issues.some(i => i.id === 'server_mariadb_detected')).toBe(true);
+  });
+
+  it('parseVersion should return null for MariaDB version string', () => {
+    expect(parseVersion('10.11.6-MariaDB')).toBeNull();
+    expect(parseVersion('5.5.5-10.6.4-MariaDB')).toBeNull();
+  });
+
+  it('parseVersion should still work for non-MariaDB versions', () => {
+    expect(parseVersion('8.0.35')).toEqual({ major: 8, minor: 0, patch: 35 });
+    expect(parseVersion('8.4.0-commercial')).toEqual({ major: 8, minor: 4, patch: 0 });
+  });
+});

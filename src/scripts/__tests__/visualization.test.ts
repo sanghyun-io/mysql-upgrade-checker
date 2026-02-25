@@ -599,6 +599,50 @@ describe('buildGraphFromContext — cap behavior', () => {
     expect(result.totalNodes).toBe(nodeCount);
   });
 
+  it('should enforce NODE_CAP strictly when a seed table has 500+ children (star graph)', () => {
+    // Star graph: one central table referenced by 500 child tables.
+    // Before the fix, getChildren(central) would bulk-add all 500 children
+    // in a single pass, pushing reducedSet well past NODE_CAP.
+    const CHILDREN = 500;
+    const centralTable = 'central';
+    const edges: IFKEdge[] = [];
+    for (let i = 0; i < CHILDREN; i++) {
+      edges.push({
+        childTable: `child_${i}`,
+        parentTable: centralTable,
+        childColumns: ['central_id'],
+        parentColumns: ['id'],
+        fkName: `fk_child_${i}`,
+      });
+    }
+
+    const relatedMap = new Map<string, Set<string>>();
+    const centralRelated = new Set<string>();
+    for (let i = 0; i < CHILDREN; i++) {
+      centralRelated.add(`child_${i}`);
+      relatedMap.set(`child_${i}`, new Set([centralTable]));
+    }
+    relatedMap.set(centralTable, centralRelated);
+
+    const fkGraph = makeMockFKGraph(edges, relatedMap);
+    const context: AnalysisContext = {
+      fkGraph,
+      tableInfos: new Map(),
+      issues: [],
+    };
+
+    // Issue on the high-degree central table — its 500 children would be added by getChildren()
+    const issues: Issue[] = [makeIssue({ tableName: centralTable, severity: 'error' })];
+
+    const result = buildGraphFromContext(context, issues, false);
+
+    expect(result.isCapped).toBe(true);
+    // Strict cap: must never exceed NODE_CAP
+    expect(result.graph.nodes.length).toBeLessThanOrEqual(NODE_CAP);
+    // The issue table itself must be present
+    expect(result.graph.nodes.some(n => n.id === centralTable)).toBe(true);
+  });
+
   it('should not return empty graph when capping with zero issues (progressiveOnly=false)', () => {
     // Regression test for: when progressiveOnly=false and issues=[], the cap
     // reduction used to seed only from issue tables (empty set), producing a
