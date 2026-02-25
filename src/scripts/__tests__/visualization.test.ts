@@ -598,4 +598,28 @@ describe('buildGraphFromContext — cap behavior', () => {
     // totalNodes is the real count before capping
     expect(result.totalNodes).toBe(nodeCount);
   });
+
+  it('should not return empty graph when capping with zero issues (progressiveOnly=false)', () => {
+    // Regression test for: when progressiveOnly=false and issues=[], the cap
+    // reduction used to seed only from issue tables (empty set), producing a
+    // blank graph. The fix seeds from the first NODE_CAP tables alphabetically.
+    const nodeCount = NODE_CAP + 100; // deliberately exceed cap
+    const { edges, relatedMap } = buildLargeChainGraph(nodeCount);
+    const fkGraph = makeMockFKGraph(edges, relatedMap);
+
+    const context: AnalysisContext = {
+      fkGraph,
+      tableInfos: new Map(),
+      issues: [],
+    };
+
+    const result = buildGraphFromContext(context, [], false);
+
+    // Graph must not be empty
+    expect(result.graph.nodes.length).toBeGreaterThan(0);
+    // Must be capped
+    expect(result.isCapped).toBe(true);
+    // Must not exceed the cap
+    expect(result.graph.nodes.length).toBeLessThanOrEqual(NODE_CAP);
+  });
 });

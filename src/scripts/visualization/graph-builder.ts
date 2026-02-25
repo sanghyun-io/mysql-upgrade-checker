@@ -98,8 +98,17 @@ export function buildGraphFromContext(
     const issueTableSet = new Set(
       issues.filter(i => i.tableName).map(i => i.tableName!.toLowerCase())
     );
+    const seedTables = new Set<string>(issueTableSet);
+    // When there are no issue tables (e.g. progressiveOnly=false, issues=[]),
+    // seed from the first NODE_CAP tables alphabetically to avoid an empty graph.
+    if (seedTables.size === 0) {
+      const sorted = [...includedTables].sort();
+      for (const t of sorted.slice(0, NODE_CAP)) {
+        seedTables.add(t);
+      }
+    }
     const reducedSet = new Set<string>();
-    for (const table of issueTableSet) {
+    for (const table of seedTables) {
       reducedSet.add(table);
       for (const p of fkGraph.getParents(table)) reducedSet.add(p);
       for (const c of fkGraph.getChildren(table)) reducedSet.add(c);

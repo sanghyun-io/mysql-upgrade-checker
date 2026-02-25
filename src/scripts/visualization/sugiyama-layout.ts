@@ -148,30 +148,49 @@ function breakCycles(input: GraphInput): {
     adjList.get(e.from)!.push(e.to);
   }
 
-  // DFS to find back edges
+  // Iterative DFS to find back edges (avoids call-stack overflow on deep graphs)
   const WHITE = 0, GRAY = 1, BLACK = 2;
   const color = new Map<string, number>();
   for (const node of input.nodes) {
     color.set(node.id, WHITE);
   }
 
-  function dfs(u: string): void {
-    color.set(u, GRAY);
-    const neighbors = adjList.get(u) ?? [];
-    for (const v of neighbors) {
-      if (color.get(v) === GRAY) {
-        // Back edge found - reverse it
-        reversedEdges.add(`${u}->${v}`);
-      } else if (color.get(v) === WHITE) {
-        dfs(v);
-      }
-    }
-    color.set(u, BLACK);
+  /** One frame on the iterative DFS call stack */
+  interface DFSFrame {
+    node: string;
+    neighbors: string[];
+    neighborIdx: number;
   }
 
   for (const node of input.nodes) {
-    if (color.get(node.id) === WHITE) {
-      dfs(node.id);
+    if (color.get(node.id) !== WHITE) continue;
+
+    const callStack: DFSFrame[] = [];
+    color.set(node.id, GRAY);
+    callStack.push({ node: node.id, neighbors: adjList.get(node.id) ?? [], neighborIdx: 0 });
+
+    while (callStack.length > 0) {
+      const frame = callStack[callStack.length - 1];
+      const u = frame.node;
+
+      if (frame.neighborIdx < frame.neighbors.length) {
+        const v = frame.neighbors[frame.neighborIdx];
+        frame.neighborIdx++;
+
+        if (color.get(v) === GRAY) {
+          // Back edge found — reverse it
+          reversedEdges.add(`${u}->${v}`);
+        } else if (color.get(v) === WHITE) {
+          // Tree edge — visit v
+          color.set(v, GRAY);
+          callStack.push({ node: v, neighbors: adjList.get(v) ?? [], neighborIdx: 0 });
+        }
+        // BLACK neighbors are already fully processed; skip them
+      } else {
+        // All neighbors processed — finish this node
+        color.set(u, BLACK);
+        callStack.pop();
+      }
     }
   }
 

@@ -278,7 +278,9 @@ function computeSummary(issues: Issue[], groups: OrderedFixGroup[]): PlanSummary
   };
 
   for (const issue of issues) {
-    const fixOption = issue.fixOptions?.find(o => o.isRecommended) ?? issue.fixOptions?.[0];
+    // Use the same resolveFixOption() logic as execution and rollback phases
+    // so that reversibility/backup calculations stay consistent.
+    const fixOption = resolveFixOption(issue.fixOptions);
     if (fixOption) {
       reversibilityCounts[fixOption.reversibility]++;
     } else if (issue.fixQuery) {

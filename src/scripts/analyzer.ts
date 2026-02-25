@@ -77,11 +77,12 @@ export class FileAnalyzer {
 
   /** Get the analysis context after analyzeFiles() completes (defensive copy) */
   getAnalysisContext(): AnalysisContext {
-    return {
+    const ctx: AnalysisContext = {
       fkGraph: this.fkGraph,
       tableInfos: new Map(this.tableInfoMap),
       issues: [...this.results.issues],
     };
+    return Object.freeze(ctx);
   }
 
   // Set callbacks for real-time updates

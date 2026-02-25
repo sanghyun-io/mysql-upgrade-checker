@@ -176,6 +176,10 @@ export class FKGraphBuilder implements IFKGraphBuilder {
   /**
    * Tarjan's algorithm: find all strongly connected components.
    * Returns SCCs sorted in reverse topological order.
+   *
+   * Implemented iteratively to avoid JS call-stack overflow on deep FK chains
+   * (1000+ tables). Uses an explicit call-stack where each frame tracks the
+   * current node and the iterator position over its successors.
    */
   getSCCs(): string[][] {
     if (this.cachedSCCs !== null) return this.cachedSCCs;
@@ -186,48 +190,82 @@ export class FKGraphBuilder implements IFKGraphBuilder {
     for (const [parent] of this.parentToChildren) nodes.add(parent);
 
     let index = 0;
-    const stack: string[] = [];
+    const tarjanStack: string[] = [];
     const onStack = new Set<string>();
     const indices = new Map<string, number>();
     const lowlinks = new Map<string, number>();
     const sccs: string[][] = [];
 
-    const strongconnect = (v: string): void => {
-      indices.set(v, index);
-      lowlinks.set(v, index);
-      index++;
-      stack.push(v);
-      onStack.add(v);
+    /** One frame of the iterative call stack */
+    interface TarjanFrame {
+      node: string;
+      neighbors: string[];
+      neighborIdx: number;
+    }
 
-      // Consider successors (parents in FK graph: child -> parent)
-      const successors = this.childToParents.get(v);
-      if (successors) {
-        for (const w of successors) {
+    for (const startNode of nodes) {
+      if (indices.has(startNode)) continue;
+
+      // Simulate recursive strongconnect(startNode) with an explicit stack
+      const callStack: TarjanFrame[] = [];
+
+      // Initialize the first frame
+      const initNeighbors = this.childToParents.has(startNode)
+        ? [...this.childToParents.get(startNode)!]
+        : [];
+      indices.set(startNode, index);
+      lowlinks.set(startNode, index);
+      index++;
+      tarjanStack.push(startNode);
+      onStack.add(startNode);
+      callStack.push({ node: startNode, neighbors: initNeighbors, neighborIdx: 0 });
+
+      while (callStack.length > 0) {
+        const frame = callStack[callStack.length - 1];
+        const { node: v } = frame;
+
+        if (frame.neighborIdx < frame.neighbors.length) {
+          // Process next neighbor
+          const w = frame.neighbors[frame.neighborIdx];
+          frame.neighborIdx++;
+
           if (!indices.has(w)) {
-            strongconnect(w);
-            lowlinks.set(v, Math.min(lowlinks.get(v)!, lowlinks.get(w)!));
+            // w not yet visited — "recurse" into w
+            const wNeighbors = this.childToParents.has(w)
+              ? [...this.childToParents.get(w)!]
+              : [];
+            indices.set(w, index);
+            lowlinks.set(w, index);
+            index++;
+            tarjanStack.push(w);
+            onStack.add(w);
+            callStack.push({ node: w, neighbors: wNeighbors, neighborIdx: 0 });
           } else if (onStack.has(w)) {
+            // w is on the Tarjan stack — update lowlink of v
             lowlinks.set(v, Math.min(lowlinks.get(v)!, indices.get(w)!));
           }
+        } else {
+          // All neighbors processed — pop this frame (equivalent to returning from recursion)
+          callStack.pop();
+
+          // Update parent's lowlink with v's lowlink (if there is a parent)
+          if (callStack.length > 0) {
+            const parent = callStack[callStack.length - 1].node;
+            lowlinks.set(parent, Math.min(lowlinks.get(parent)!, lowlinks.get(v)!));
+          }
+
+          // If v is a root node of an SCC, pop the SCC off the Tarjan stack
+          if (lowlinks.get(v) === indices.get(v)) {
+            const scc: string[] = [];
+            let w: string;
+            do {
+              w = tarjanStack.pop()!;
+              onStack.delete(w);
+              scc.push(w);
+            } while (w !== v);
+            sccs.push(scc);
+          }
         }
-      }
-
-      // If v is a root node, pop SCC
-      if (lowlinks.get(v) === indices.get(v)) {
-        const scc: string[] = [];
-        let w: string;
-        do {
-          w = stack.pop()!;
-          onStack.delete(w);
-          scc.push(w);
-        } while (w !== v);
-        sccs.push(scc);
-      }
-    };
-
-    for (const node of nodes) {
-      if (!indices.has(node)) {
-        strongconnect(node);
       }
     }
 

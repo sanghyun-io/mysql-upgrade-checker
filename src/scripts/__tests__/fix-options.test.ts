@@ -4,6 +4,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { generateFixOptions, enrichIssuesWithFixOptions } from '../fix-options/generator';
+import { parseUserHost } from '../fix-options/strategies/auth-fix';
 import type { Issue } from '../types';
 
 /** Helper: create a minimal issue */
@@ -170,6 +171,76 @@ describe('generateFixOptions', () => {
 
       const options = generateFixOptions(issue);
       expect(options[0].sqlTemplate).toContain('authentication_webauthn');
+    });
+
+    it('should target correct account when userName contains host (user@localhost)', () => {
+      const issue = makeIssue({
+        id: 'mysql_native_password',
+        userName: 'app_user@localhost',
+      });
+
+      const options = generateFixOptions(issue);
+      expect(options[0].sqlTemplate).toContain('`app_user`@\'localhost\'');
+      expect(options[0].sqlTemplate).not.toContain("@'%'");
+    });
+
+    it('should target correct account when userName uses quoted format (\'admin\'@\'10.0.0.1\')', () => {
+      const issue = makeIssue({
+        id: 'mysql_native_password',
+        userName: "'admin'@'10.0.0.1'",
+      });
+
+      const options = generateFixOptions(issue);
+      expect(options[0].sqlTemplate).toContain('`admin`@\'10.0.0.1\'');
+      expect(options[0].sqlTemplate).not.toContain("@'%'");
+    });
+
+    it('should default to @\'%\' for plain user name without host', () => {
+      const issue = makeIssue({
+        id: 'mysql_native_password',
+        userName: 'app_user',
+      });
+
+      const options = generateFixOptions(issue);
+      expect(options[0].sqlTemplate).toContain("`app_user`@'%'");
+    });
+
+    it('should apply correct host to rollbackTemplate as well', () => {
+      const issue = makeIssue({
+        id: 'mysql_native_password',
+        userName: 'app_user@10.0.0.1',
+      });
+
+      const options = generateFixOptions(issue);
+      const authChangeOpt = options.find(o => o.strategy === 'auth_change');
+      expect(authChangeOpt?.rollbackTemplate).toContain('`app_user`@\'10.0.0.1\'');
+      expect(authChangeOpt?.rollbackTemplate).not.toContain("@'%'");
+    });
+  });
+
+  describe('parseUserHost', () => {
+    it('should parse plain user name and default host to %', () => {
+      expect(parseUserHost('app_user')).toEqual({ user: 'app_user', host: '%' });
+    });
+
+    it('should parse user@host without quotes', () => {
+      expect(parseUserHost('app_user@localhost')).toEqual({ user: 'app_user', host: 'localhost' });
+    });
+
+    it('should parse user@host with IP address', () => {
+      expect(parseUserHost('admin@10.0.0.1')).toEqual({ user: 'admin', host: '10.0.0.1' });
+    });
+
+    it('should parse quoted format \'user\'@\'host\'', () => {
+      expect(parseUserHost("'admin'@'10.0.0.1'")).toEqual({ user: 'admin', host: '10.0.0.1' });
+    });
+
+    it('should parse mixed quoting (quoted user, unquoted host)', () => {
+      expect(parseUserHost("'app_user'@localhost")).toEqual({ user: 'app_user', host: 'localhost' });
+    });
+
+    it('should parse wildcard host %', () => {
+      expect(parseUserHost('root@%')).toEqual({ user: 'root', host: '%' });
     });
   });
 
