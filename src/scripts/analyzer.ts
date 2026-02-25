@@ -23,6 +23,10 @@ import { compatibilityRules } from './rules';
 import { REMOVED_SYS_VARS_84, SYS_VARS_NEW_DEFAULTS_84, CHANGED_FUNCTIONS_IN_GENERATED_COLUMNS, NEW_RESERVED_KEYWORDS_84 } from './constants';
 import { parseCreateTable } from './parsers/table-parser';
 import { extractUsers } from './parsers/user-parser';
+import { FKGraphBuilder } from './analysis/fk-graph';
+import { analyzeCharsetCascade } from './analysis/charset-cascade';
+import { enrichIssuesWithFixOptions } from './fix-options/generator';
+import type { AnalysisContext } from './domain/analysis-context';
 
 // Callback types for real-time updates
 export type OnIssueCallback = (issue: Issue) => void;
@@ -67,6 +71,19 @@ export class FileAnalyzer {
   // Files content cache for 2-pass analysis
   private fileContentsCache: Map<string, string> = new Map();
 
+  // Task 2: FK graph and parsed table info for context-aware analysis
+  private fkGraph: FKGraphBuilder = new FKGraphBuilder();
+  private tableInfoMap: Map<string, TableInfo> = new Map();
+
+  /** Get the analysis context after analyzeFiles() completes */
+  getAnalysisContext(): AnalysisContext {
+    return {
+      fkGraph: this.fkGraph,
+      tableInfos: this.tableInfoMap,
+      issues: this.results.issues,
+    };
+  }
+
   // Set callbacks for real-time updates
   setCallbacks(onIssue: OnIssueCallback | null, onProgress: OnProgressCallback | null): void {
     this.onIssue = onIssue;
@@ -108,6 +125,8 @@ export class FileAnalyzer {
     this.tableCharsetMap.clear();
     this.pendingFKChecks = [];
     this.fileContentsCache.clear();
+    this.tableInfoMap.clear();
+    this.fkGraph = new FKGraphBuilder();
 
     // ========================================================================
     // PASS 1: Collect table index and charset information from all SQL files
@@ -165,6 +184,26 @@ export class FileAnalyzer {
     // PASS 2.6: Validate VIEW references (orphaned objects check)
     // ========================================================================
     this.validateViewReferences();
+
+    // ========================================================================
+    // PASS 2.7: Build FK dependency graph
+    // ========================================================================
+    this.buildFKGraph();
+
+    // ========================================================================
+    // PASS 2.8: Charset cascade analysis (FK charset mismatch detection)
+    // ========================================================================
+    this.analyzeCharsetCascades();
+
+    // ========================================================================
+    // PASS 2.9: Enrich issues with FK and column context
+    // ========================================================================
+    this.enrichIssuesWithContext();
+
+    // ========================================================================
+    // PASS 2.10: Generate multi-option fix strategies for all issues
+    // ========================================================================
+    enrichIssuesWithFixOptions(this.results.issues);
 
     // Clean up cache
     this.fileContentsCache.clear();
@@ -843,6 +882,9 @@ export class FileAnalyzer {
     for (const match of matches) {
       const table = parseCreateTable(match[0]);
       if (table) {
+        // Store parsed table info for FK graph building (Pass 2.7)
+        this.tableInfoMap.set(table.name.toLowerCase(), table);
+
         // Check table engine compatibility
         this.checkTableEngine(table, fileName);
 
@@ -1901,6 +1943,108 @@ export class FileAnalyzer {
           code: viewCheck.code,
           mysqlShellCheckId: 'orphanedObjects'
         });
+      }
+    }
+  }
+
+  // ==========================================================================
+  // PASS 2.7: FK GRAPH BUILDING
+  // ==========================================================================
+
+  /**
+   * Build the FK dependency graph from all collected table info.
+   */
+  private buildFKGraph(): void {
+    this.fkGraph.buildFromTableInfos(this.tableInfoMap);
+
+    // Missing reference tables are already reported in validateForeignKeyReferences (fk_ref_table_not_found)
+
+    // Generate issues for cyclic FK dependencies
+    if (this.fkGraph.hasCycle()) {
+      const sccs = this.fkGraph.getSCCs().filter(scc => scc.length > 1);
+      for (const scc of sccs) {
+        this.addIssue({
+          id: 'fk_circular_dependency',
+          type: 'schema',
+          category: 'invalidObjects',
+          severity: 'warning',
+          title: 'FK 순환 참조 감지',
+          description: `다음 테이블들이 순환 FK 참조를 형성합니다: ${scc.join(' ↔ ')}. 마이그레이션 시 FK를 일시 비활성화해야 합니다.`,
+          suggestion: 'SET FOREIGN_KEY_CHECKS = 0; 으로 FK를 비활성화한 후 ALTER TABLE을 실행하세요.',
+          location: 'FK Graph Analysis',
+          code: `Circular: ${scc.join(' -> ')} -> ${scc[0]}`,
+          fkContext: {
+            relatedTables: scc,
+            isChildTable: false,
+            hasCycle: true,
+          },
+        });
+      }
+    }
+  }
+
+  // ==========================================================================
+  // PASS 2.8: CHARSET CASCADE ANALYSIS
+  // ==========================================================================
+
+  /**
+   * Analyze FK relationships for charset/collation mismatches.
+   */
+  private analyzeCharsetCascades(): void {
+    const charsetIssues = analyzeCharsetCascade(this.tableInfoMap, this.fkGraph);
+    for (const issue of charsetIssues) {
+      this.addIssue(issue);
+    }
+  }
+
+  // ==========================================================================
+  // PASS 2.9: ENRICH ISSUES WITH CONTEXT
+  // ==========================================================================
+
+  /**
+   * Enrich existing issues with FK context and column context.
+   */
+  private enrichIssuesWithContext(): void {
+    for (const issue of this.results.issues) {
+      // Skip issues that already have context (e.g., charset cascade issues)
+      if (issue.fkContext || issue.columnContext) continue;
+
+      const tableName = issue.tableName?.toLowerCase();
+      if (!tableName) continue;
+
+      // Add FK context if the table has FK relationships
+      if (this.fkGraph.hasRelationships(tableName)) {
+        const relatedTables = this.fkGraph.getRelatedTables(tableName);
+        const isChild = this.fkGraph.getParents(tableName).size > 0;
+
+        // Check if this table is part of a cycle
+        const sccs = this.fkGraph.getSCCs();
+        const inCycle = sccs.some(scc => scc.length > 1 && scc.includes(tableName));
+
+        issue.fkContext = {
+          relatedTables: [...relatedTables],
+          isChildTable: isChild,
+          hasCycle: inCycle || undefined,
+          missingReference: [...this.fkGraph.getMissingTables()].some(mt =>
+            this.fkGraph.getParents(tableName).has(mt)
+          ) || undefined,
+        };
+      }
+
+      // Add column context for column-specific issues
+      if (issue.columnName && tableName) {
+        const tableInfo = this.tableInfoMap.get(tableName);
+        if (tableInfo) {
+          const column = tableInfo.columns.find(
+            c => c.name.toLowerCase() === issue.columnName!.toLowerCase()
+          );
+          if (column) {
+            issue.columnContext = {
+              nullable: column.nullable,
+              hasDefault: column.default !== undefined,
+            };
+          }
+        }
       }
     }
   }
