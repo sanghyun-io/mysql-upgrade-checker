@@ -186,20 +186,34 @@ describe('analyzeServerResult - robustness', () => {
   it('should handle malformed TSV (mismatched columns)', () => {
     const tsv = 'col1\tcol2\tcol3\nval1\tval2'; // missing col3
     const issues = analyzeServerResult(tsv);
-    // Should not crash - either empty or parse error
+    // Should not crash and should return structured result
     expect(Array.isArray(issues)).toBe(true);
+    // If any issues returned, they should be properly structured
+    for (const issue of issues) {
+      expect(issue).toHaveProperty('id');
+      expect(issue).toHaveProperty('severity');
+    }
   });
 
   it('should handle truncated JSON', () => {
     const truncated = '[{"User":"root","Host":"local';
     const issues = analyzeServerResult(truncated);
-    // Should fall back to TSV parsing gracefully
+    // Should fall back to TSV parsing gracefully with structured issues
     expect(Array.isArray(issues)).toBe(true);
+    for (const issue of issues) {
+      expect(issue).toHaveProperty('id');
+      expect(issue).toHaveProperty('severity');
+    }
   });
 
   it('should handle completely invalid input', () => {
     const issues = analyzeServerResult('!@#$%^&*()');
     expect(Array.isArray(issues)).toBe(true);
+    // Should not produce parse error for arbitrary non-data strings
+    for (const issue of issues) {
+      expect(issue).toHaveProperty('id');
+      expect(issue).toHaveProperty('severity');
+    }
   });
 
   it('should handle header-only TSV (no data rows)', () => {
@@ -212,6 +226,10 @@ describe('analyzeServerResult - robustness', () => {
     const tsv = 'value\n42';
     const issues = analyzeServerResult(tsv);
     expect(Array.isArray(issues)).toBe(true);
+    for (const issue of issues) {
+      expect(issue).toHaveProperty('id');
+      expect(issue).toHaveProperty('severity');
+    }
   });
 
   it('should handle TSV with extra empty lines', () => {
@@ -223,8 +241,12 @@ describe('analyzeServerResult - robustness', () => {
   it('should handle JSON with unexpected structure', () => {
     const json = '{"unexpected": "structure", "no_columns": true}';
     const issues = analyzeServerResult(json);
-    // Should not crash
+    // Should not crash and produce structured issues
     expect(Array.isArray(issues)).toBe(true);
+    for (const issue of issues) {
+      expect(issue).toHaveProperty('id');
+      expect(issue).toHaveProperty('severity');
+    }
   });
 
   it('should handle very large input without crashing', () => {
@@ -235,6 +257,10 @@ describe('analyzeServerResult - robustness', () => {
     }
     const issues = analyzeServerResult(tsv);
     expect(Array.isArray(issues)).toBe(true);
+    for (const issue of issues) {
+      expect(issue).toHaveProperty('id');
+      expect(issue).toHaveProperty('severity');
+    }
   });
 });
 

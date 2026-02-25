@@ -71,8 +71,9 @@ export function buildGraphFromContext(
     // Also include their FK neighbors for context
     includedTables = new Set<string>();
     for (const table of issueTableSet) {
+      // Issue #5 fix: Always include issue tables, even without FK edges
+      includedTables.add(table);
       if (allTableIds.has(table)) {
-        includedTables.add(table);
         const related = fkGraph.getRelatedTables(table);
         for (const r of related) {
           includedTables.add(r);

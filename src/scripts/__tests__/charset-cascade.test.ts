@@ -41,17 +41,17 @@ function makeTable(
 }
 
 describe('analyzeCharsetCascade', () => {
-  it('should detect utf8mb3 vs utf8mb4 charset mismatch across FK', () => {
+  it('should detect utf8mb3 vs utf8mb4 charset mismatch across FK (text columns)', () => {
     const tables = new Map<string, TableInfo>();
     tables.set('parent', makeTable('parent', {
       charset: 'utf8mb4',
-      columns: [{ name: 'id', type: 'INT', nullable: false }],
+      columns: [{ name: 'id', type: 'VARCHAR(50)', nullable: false, charset: 'utf8mb4' }],
     }));
     tables.set('child', makeTable('child', {
       charset: 'utf8mb3',
       columns: [
         { name: 'id', type: 'INT', nullable: false },
-        { name: 'parent_id', type: 'INT', nullable: true },
+        { name: 'parent_id', type: 'VARCHAR(50)', nullable: true, charset: 'utf8mb3' },
       ],
       fks: [{ name: 'fk_child', columns: ['parent_id'], refTable: 'parent', refColumns: ['id'] }],
     }));
@@ -141,12 +141,13 @@ describe('analyzeCharsetCascade', () => {
     const tables = new Map<string, TableInfo>();
     tables.set('parent', makeTable('parent', {
       charset: 'utf8', // alias for utf8mb3
+      columns: [{ name: 'id', type: 'VARCHAR(50)', nullable: false, charset: 'utf8' }],
     }));
     tables.set('child', makeTable('child', {
       charset: 'utf8mb4',
       columns: [
         { name: 'id', type: 'INT', nullable: false },
-        { name: 'parent_id', type: 'INT', nullable: true },
+        { name: 'parent_id', type: 'VARCHAR(50)', nullable: true, charset: 'utf8mb4' },
       ],
       fks: [{ name: 'fk_child', columns: ['parent_id'], refTable: 'parent', refColumns: ['id'] }],
     }));
@@ -222,12 +223,15 @@ describe('analyzeCharsetCascade', () => {
 
   it('should include fix SQL in charset mismatch issues', () => {
     const tables = new Map<string, TableInfo>();
-    tables.set('parent', makeTable('parent', { charset: 'utf8mb4' }));
+    tables.set('parent', makeTable('parent', {
+      charset: 'utf8mb4',
+      columns: [{ name: 'id', type: 'VARCHAR(50)', nullable: false, charset: 'utf8mb4' }],
+    }));
     tables.set('child', makeTable('child', {
       charset: 'utf8mb3',
       columns: [
         { name: 'id', type: 'INT', nullable: false },
-        { name: 'parent_id', type: 'INT', nullable: true },
+        { name: 'parent_id', type: 'VARCHAR(50)', nullable: true, charset: 'utf8mb3' },
       ],
       fks: [{ name: 'fk_child', columns: ['parent_id'], refTable: 'parent', refColumns: ['id'] }],
     }));
@@ -243,12 +247,15 @@ describe('analyzeCharsetCascade', () => {
 
   it('should set fkContext on charset mismatch issues', () => {
     const tables = new Map<string, TableInfo>();
-    tables.set('parent', makeTable('parent', { charset: 'utf8mb4' }));
+    tables.set('parent', makeTable('parent', {
+      charset: 'utf8mb4',
+      columns: [{ name: 'id', type: 'VARCHAR(50)', nullable: false, charset: 'utf8mb4' }],
+    }));
     tables.set('child', makeTable('child', {
       charset: 'utf8mb3',
       columns: [
         { name: 'id', type: 'INT', nullable: false },
-        { name: 'parent_id', type: 'INT', nullable: true },
+        { name: 'parent_id', type: 'VARCHAR(50)', nullable: true, charset: 'utf8mb3' },
       ],
       fks: [{ name: 'fk_child', columns: ['parent_id'], refTable: 'parent', refColumns: ['id'] }],
     }));
@@ -263,14 +270,93 @@ describe('analyzeCharsetCascade', () => {
     expect(issues[0].fkContext!.isChildTable).toBe(true);
   });
 
+  it('should NOT flag INT/BIGINT FK columns as charset mismatch (non-text columns)', () => {
+    const tables = new Map<string, TableInfo>();
+    tables.set('parent', makeTable('parent', {
+      charset: 'utf8mb4',
+      columns: [{ name: 'id', type: 'INT', nullable: false }],
+    }));
+    tables.set('child', makeTable('child', {
+      charset: 'utf8mb3', // table-level mismatch, but FK columns are INT
+      columns: [
+        { name: 'id', type: 'INT', nullable: false },
+        { name: 'parent_id', type: 'INT', nullable: true },
+      ],
+      fks: [{ name: 'fk_child', columns: ['parent_id'], refTable: 'parent', refColumns: ['id'] }],
+    }));
+
+    const graph = new FKGraphBuilder();
+    graph.buildFromTableInfos(tables);
+
+    const issues = analyzeCharsetCascade(tables, graph);
+    const charsetIssues = issues.filter(i => i.id === 'fk_charset_mismatch');
+    // INT columns should NOT be flagged — charset is irrelevant for numeric types
+    expect(charsetIssues.length).toBe(0);
+  });
+
+  it('should NOT flag BIGINT FK columns as charset mismatch', () => {
+    const tables = new Map<string, TableInfo>();
+    tables.set('parent', makeTable('parent', {
+      charset: 'utf8mb4',
+      columns: [{ name: 'id', type: 'BIGINT', nullable: false }],
+    }));
+    tables.set('child', makeTable('child', {
+      charset: 'utf8mb3',
+      columns: [
+        { name: 'id', type: 'INT', nullable: false },
+        { name: 'parent_id', type: 'BIGINT', nullable: true },
+      ],
+      fks: [{ name: 'fk_child', columns: ['parent_id'], refTable: 'parent', refColumns: ['id'] }],
+    }));
+
+    const graph = new FKGraphBuilder();
+    graph.buildFromTableInfos(tables);
+
+    const issues = analyzeCharsetCascade(tables, graph);
+    const charsetIssues = issues.filter(i => i.id === 'fk_charset_mismatch');
+    expect(charsetIssues.length).toBe(0);
+  });
+
+  it('should preserve original column type in fix SQL (not force VARCHAR(255))', () => {
+    const tables = new Map<string, TableInfo>();
+    tables.set('parent', makeTable('parent', {
+      charset: 'utf8mb4',
+      columns: [{ name: 'code', type: 'CHAR(10)', nullable: false, charset: 'utf8mb4' }],
+    }));
+    tables.set('child', makeTable('child', {
+      charset: 'utf8mb3',
+      columns: [
+        { name: 'id', type: 'INT', nullable: false },
+        { name: 'parent_code', type: 'CHAR(10)', nullable: false, charset: 'utf8mb3' },
+      ],
+      fks: [{ name: 'fk_code', columns: ['parent_code'], refTable: 'parent', refColumns: ['code'] }],
+    }));
+
+    const graph = new FKGraphBuilder();
+    graph.buildFromTableInfos(tables);
+
+    const issues = analyzeCharsetCascade(tables, graph);
+    const charsetIssues = issues.filter(i => i.id === 'fk_charset_mismatch');
+    expect(charsetIssues.length).toBe(1);
+    expect(charsetIssues[0].fixQuery).toBeDefined();
+    // Should contain original type CHAR(10), not VARCHAR(255)
+    expect(charsetIssues[0].fixQuery).toContain('CHAR(10)');
+    expect(charsetIssues[0].fixQuery).not.toContain('VARCHAR(255)');
+    // Should preserve NOT NULL
+    expect(charsetIssues[0].fixQuery).toContain('NOT NULL');
+  });
+
   it('should treat latin1 vs utf8mb4 as warning (not Error 3780)', () => {
     const tables = new Map<string, TableInfo>();
-    tables.set('parent', makeTable('parent', { charset: 'utf8mb4' }));
+    tables.set('parent', makeTable('parent', {
+      charset: 'utf8mb4',
+      columns: [{ name: 'id', type: 'VARCHAR(50)', nullable: false, charset: 'utf8mb4' }],
+    }));
     tables.set('child', makeTable('child', {
       charset: 'latin1',
       columns: [
         { name: 'id', type: 'INT', nullable: false },
-        { name: 'parent_id', type: 'INT', nullable: true },
+        { name: 'parent_id', type: 'VARCHAR(50)', nullable: true, charset: 'latin1' },
       ],
       fks: [{ name: 'fk_child', columns: ['parent_id'], refTable: 'parent', refColumns: ['id'] }],
     }));

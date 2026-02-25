@@ -19,6 +19,9 @@ import type { TableInfo, Issue } from '../types';
 export interface IFKEdge {
   childTable: string;
   parentTable: string;
+  childColumns: string[];
+  parentColumns: string[];
+  fkName: string;
 }
 
 export interface IFKGraphBuilder {

@@ -142,16 +142,20 @@ export class FKGraphBuilder implements IFKGraphBuilder {
 
   /**
    * Get parent tables (tables that this table references via FK).
+   * Returns a defensive copy to prevent mutation of internal state.
    */
   getParents(table: string): Set<string> {
-    return this.childToParents.get(table.toLowerCase()) ?? new Set();
+    const internal = this.childToParents.get(table.toLowerCase());
+    return internal ? new Set(internal) : new Set();
   }
 
   /**
    * Get child tables (tables that reference this table via FK).
+   * Returns a defensive copy to prevent mutation of internal state.
    */
   getChildren(table: string): Set<string> {
-    return this.parentToChildren.get(table.toLowerCase()) ?? new Set();
+    const internal = this.parentToChildren.get(table.toLowerCase());
+    return internal ? new Set(internal) : new Set();
   }
 
   /**

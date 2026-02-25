@@ -9,7 +9,7 @@ import type { Issue } from '../../types';
 export function generateDateFixOptions(issue: Issue): FixOption[] {
   const table = issue.tableName ?? 'unknown';
   const column = issue.columnName ?? 'unknown';
-  const isNullable = issue.columnContext?.nullable ?? true;
+  const isNullable = issue.columnContext?.nullable ?? false;
 
   const options: FixOption[] = [];
 

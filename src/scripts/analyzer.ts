@@ -75,12 +75,12 @@ export class FileAnalyzer {
   private fkGraph: FKGraphBuilder = new FKGraphBuilder();
   private tableInfoMap: Map<string, TableInfo> = new Map();
 
-  /** Get the analysis context after analyzeFiles() completes */
+  /** Get the analysis context after analyzeFiles() completes (defensive copy) */
   getAnalysisContext(): AnalysisContext {
     return {
       fkGraph: this.fkGraph,
-      tableInfos: this.tableInfoMap,
-      issues: this.results.issues,
+      tableInfos: new Map(this.tableInfoMap),
+      issues: [...this.results.issues],
     };
   }
 

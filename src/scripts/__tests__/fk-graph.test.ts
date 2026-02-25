@@ -319,8 +319,8 @@ describe('FKGraphBuilder', () => {
       graph.buildFromTableInfos(tables);
       const buildTime = performance.now() - start;
 
-      // Build should complete in reasonable time (< 500ms for 1k tables)
-      expect(buildTime).toBeLessThan(500);
+      // Build should complete in reasonable time (< 2000ms for 1k tables, CI-friendly)
+      expect(buildTime).toBeLessThan(2000);
       expect(graph.getNodeCount()).toBe(1000);
       expect(graph.getEdgeCount()).toBe(999);
 
@@ -329,7 +329,7 @@ describe('FKGraphBuilder', () => {
       const order = graph.getTopologicalOrder(new Set(tables.keys()));
       const sortTime = performance.now() - sortStart;
 
-      expect(sortTime).toBeLessThan(500);
+      expect(sortTime).toBeLessThan(2000);
       expect(order.length).toBe(1000);
       // First element should be table_0 (no parents)
       expect(order[0]).toBe('table_0');

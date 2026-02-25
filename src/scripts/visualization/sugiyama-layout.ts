@@ -214,11 +214,13 @@ function assignLayers(
   // Longest path from sources (BFS-like)
   const layer = new Map<string, number>();
   const queue: string[] = [];
+  const enqueued = new Set<string>(); // O(1) membership check instead of queue.includes
 
   // Sources: nodes with in-degree 0
   for (const id of nodeIds) {
     if ((inDegree.get(id) ?? 0) === 0) {
       queue.push(id);
+      enqueued.add(id);
       layer.set(id, 0);
     }
   }
@@ -226,6 +228,7 @@ function assignLayers(
   // If no sources (all cycles), pick first node
   if (queue.length === 0 && nodeIds.length > 0) {
     queue.push(nodeIds[0]);
+    enqueued.add(nodeIds[0]);
     layer.set(nodeIds[0], 0);
   }
 
@@ -244,8 +247,9 @@ function assignLayers(
       }
 
       inDegree.set(v, (inDegree.get(v) ?? 1) - 1);
-      if ((inDegree.get(v) ?? 0) <= 0 && !queue.includes(v)) {
+      if ((inDegree.get(v) ?? 0) <= 0 && !enqueued.has(v)) {
         queue.push(v);
+        enqueued.add(v);
       }
     }
   }

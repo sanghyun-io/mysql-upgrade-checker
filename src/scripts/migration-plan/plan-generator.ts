@@ -209,7 +209,11 @@ function generateExecutionPhase(groups: OrderedFixGroup[]): MigrationPhase {
 
     for (const issue of group.issues) {
       const rollback = generateRollbackEntry(issue);
-      const fixOption = issue.fixOptions?.find(o => o.isRecommended) ?? issue.fixOptions?.[0];
+      const recommendedOption = issue.fixOptions?.find(o => o.isRecommended);
+      // Issue #7 fix: fallback to first option with SQL when recommended has none
+      const fixOption = recommendedOption?.sqlTemplate
+        ? recommendedOption
+        : issue.fixOptions?.find(o => o.sqlTemplate) ?? recommendedOption ?? issue.fixOptions?.[0];
       const sql = fixOption?.sqlTemplate ?? issue.fixQuery;
 
       if (!sql) continue;

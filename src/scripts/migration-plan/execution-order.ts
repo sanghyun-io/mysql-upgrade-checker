@@ -55,9 +55,10 @@ export function computeExecutionOrder(
       }
     }
 
-    // Add tables not in FK graph (no relationships)
+    // Add tables not in FK graph (no relationships) - O(n) with Set
+    const orderedSet = new Set(orderedTables);
     for (const t of byTable.keys()) {
-      if (!orderedTables.includes(t)) {
+      if (!orderedSet.has(t)) {
         orderedTables.push(t);
       }
     }

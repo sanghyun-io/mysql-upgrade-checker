@@ -32,7 +32,7 @@ function selectRecommendedIndex(issue: Issue, options: FixOption[]): number {
 
   // === Invalid Date Fix ===
   if (issueId === 'invalid_date_zero' || issueId === 'invalid_datetime_zero') {
-    const isNullable = issue.columnContext?.nullable ?? true;
+    const isNullable = issue.columnContext?.nullable ?? false;
     if (isNullable) {
       // Nullable column → recommend NULL
       return options.findIndex(o => o.strategy === 'date_to_null');

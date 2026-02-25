@@ -8,7 +8,7 @@
  * Also detects column-level collation mismatches in FK join columns.
  */
 
-import type { TableInfo, Issue } from '../types';
+import type { TableInfo, Issue, ColumnInfo } from '../types';
 import type { FKGraphBuilder } from './fk-graph';
 
 /** Charset mismatch detail for an FK relationship */
@@ -52,6 +52,19 @@ function normalizeCharset(charset: string): string {
   return lower;
 }
 
+/** Column types that have charset/collation (text/string family) */
+const TEXT_TYPE_PATTERN = /^(char|varchar|text|tinytext|mediumtext|longtext|enum|set)\b/i;
+
+/** Check if a column type is a character/string type that has charset */
+function isTextColumn(type: string): boolean {
+  return TEXT_TYPE_PATTERN.test(type.trim());
+}
+
+/** Find column info by name (case-insensitive) */
+function findColumn(table: TableInfo, columnName: string): ColumnInfo | undefined {
+  return table.columns.find(c => c.name.toLowerCase() === columnName.toLowerCase());
+}
+
 /**
  * Analyze FK relationships for charset/collation mismatches.
  * Returns issues for each mismatched FK.
@@ -71,10 +84,16 @@ export function analyzeCharsetCascade(
 
     if (!childTable || !parentTable) continue;
 
-    // Check each FK column pair
+    // Check each FK column pair (only for text/string columns)
     for (let i = 0; i < edge.childColumns.length; i++) {
       const childCol = edge.childColumns[i];
       const parentCol = edge.parentColumns[i];
+
+      // Issue #1 fix: Skip non-text columns (INT, BIGINT, etc.) — charset is irrelevant
+      const childColInfo = findColumn(childTable, childCol);
+      const parentColInfo = findColumn(parentTable, parentCol);
+      if (childColInfo && !isTextColumn(childColInfo.type)) continue;
+      if (parentColInfo && !isTextColumn(parentColInfo.type)) continue;
 
       const childCharsetInfo = resolveCharset(childTable, childCol);
       const parentCharsetInfo = resolveCharset(parentTable, parentCol);
@@ -105,7 +124,7 @@ export function analyzeCharsetCascade(
             isChildTable: true,
             hasCycle: false,
           },
-          fixQuery: generateCharsetFixSQL(childTable.name, childCol, parentTable.name, parentCol),
+          fixQuery: generateCharsetFixSQL(childTable.name, childCol, parentTable.name, parentCol, childTable, parentTable),
           mysqlShellCheckId: 'charsetMismatch',
         });
       }
@@ -155,19 +174,42 @@ function generateCharsetFixSQL(
   childTable: string,
   childCol: string,
   parentTable: string,
-  parentCol: string
+  parentCol: string,
+  childTableInfo?: TableInfo,
+  parentTableInfo?: TableInfo
 ): string {
+  const parentColDef = buildColumnModify(parentTableInfo, parentCol);
+  const childColDef = buildColumnModify(childTableInfo, childCol);
+
   return [
     `-- Step 1: FK 비활성화`,
     `SET FOREIGN_KEY_CHECKS = 0;`,
     ``,
     `-- Step 2: 양쪽 컬럼을 utf8mb4로 변환`,
-    `ALTER TABLE \`${parentTable}\` MODIFY COLUMN \`${parentCol}\` VARCHAR(255) CHARACTER SET utf8mb4;`,
-    `ALTER TABLE \`${childTable}\` MODIFY COLUMN \`${childCol}\` VARCHAR(255) CHARACTER SET utf8mb4;`,
+    `ALTER TABLE \`${parentTable}\` ${parentColDef};`,
+    `ALTER TABLE \`${childTable}\` ${childColDef};`,
     ``,
     `-- Step 3: FK 재활성화`,
     `SET FOREIGN_KEY_CHECKS = 1;`,
   ].join('\n');
+}
+
+/** Build MODIFY COLUMN clause preserving original type/nullability/default */
+function buildColumnModify(table: TableInfo | undefined, colName: string): string {
+  if (!table) {
+    return `MODIFY COLUMN \`${colName}\` /* 원본 타입 확인 필요 */ CHARACTER SET utf8mb4`;
+  }
+  const col = findColumn(table, colName);
+  if (!col) {
+    return `MODIFY COLUMN \`${colName}\` /* 원본 타입 확인 필요 */ CHARACTER SET utf8mb4`;
+  }
+
+  const parts = [`MODIFY COLUMN \`${colName}\` ${col.type} CHARACTER SET utf8mb4`];
+  if (!col.nullable) parts.push('NOT NULL');
+  if (col.default !== undefined) {
+    parts.push(`DEFAULT ${col.default === 'NULL' ? 'NULL' : `'${col.default}'`}`);
+  }
+  return parts.join(' ');
 }
 
 function findTableCaseInsensitive(
