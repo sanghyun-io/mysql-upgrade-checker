@@ -691,6 +691,76 @@ describe('Invalid Objects Rules', () => {
     it('should detect DB2 SQL mode', () => {
       expect(testPatternMatch('obsolete_sql_mode', 'sql_mode=DB2')).toBe(true);
     });
+
+    it('should detect NO_AUTO_CREATE_USER SQL mode in config file', () => {
+      expect(testPatternMatch('obsolete_sql_mode', 'sql_mode=STRICT_TRANS_TABLES,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION')).toBe(true);
+    });
+
+    it('should detect NO_AUTO_CREATE_USER alone in config file', () => {
+      expect(testPatternMatch('obsolete_sql_mode', 'sql_mode=NO_AUTO_CREATE_USER')).toBe(true);
+    });
+  });
+
+  describe('Obsolete SQL modes in SQL dump files', () => {
+    it('should detect NO_AUTO_CREATE_USER in SET sql_mode statement', () => {
+      expect(testPatternMatch('obsolete_sql_mode_in_dump',
+        "SET sql_mode='STRICT_TRANS_TABLES,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION'")).toBe(true);
+    });
+
+    it('should detect DB2 in SET sql_mode statement', () => {
+      expect(testPatternMatch('obsolete_sql_mode_in_dump',
+        "SET sql_mode='STRICT_TRANS_TABLES,DB2'")).toBe(true);
+    });
+
+    it('should detect ORACLE in SET sql_mode with double quotes', () => {
+      expect(testPatternMatch('obsolete_sql_mode_in_dump',
+        'SET sql_mode="STRICT_TRANS_TABLES,ORACLE"')).toBe(true);
+    });
+
+    it('should detect MAXDB in SET sql_mode with spaces around equals', () => {
+      expect(testPatternMatch('obsolete_sql_mode_in_dump',
+        "SET sql_mode = 'STRICT_TRANS_TABLES,MAXDB,NO_ENGINE_SUBSTITUTION'")).toBe(true);
+    });
+
+    it('should NOT match SET sql_mode with only valid modes', () => {
+      expect(testPatternMatch('obsolete_sql_mode_in_dump',
+        "SET sql_mode='STRICT_TRANS_TABLES,NO_ENGINE_SUBSTITUTION'")).toBe(false);
+    });
+
+    it('should detect obsolete mode in @@SESSION.sql_mode form', () => {
+      expect(testPatternMatch('obsolete_sql_mode_in_dump',
+        "SET @@SESSION.sql_mode='STRICT_TRANS_TABLES,NO_AUTO_CREATE_USER'")).toBe(true);
+    });
+
+    it('should detect obsolete mode in @@sql_mode form', () => {
+      expect(testPatternMatch('obsolete_sql_mode_in_dump',
+        "SET @@sql_mode='NO_AUTO_CREATE_USER'")).toBe(true);
+    });
+
+    it('should detect obsolete mode in mysqldump multi-assignment form (no spaces)', () => {
+      // Common in mysqldump output: SET @OLD_SQL_MODE=@@SQL_MODE, SQL_MODE='...';
+      expect(testPatternMatch('obsolete_sql_mode_in_dump',
+        "SET @OLD_SQL_MODE=@@SQL_MODE, SQL_MODE='NO_AUTO_CREATE_USER,STRICT_TRANS_TABLES'")).toBe(true);
+    });
+
+    it('should detect obsolete mode in mysqldump multi-assignment form (with spaces)', () => {
+      // Formatter-altered: SET @OLD_SQL_MODE = @@SQL_MODE, SQL_MODE='...';
+      expect(testPatternMatch('obsolete_sql_mode_in_dump',
+        "SET @OLD_SQL_MODE = @@SQL_MODE, SQL_MODE='NO_AUTO_CREATE_USER'")).toBe(true);
+    });
+
+    it('should detect obsolete mode in @@GLOBAL.sql_mode form', () => {
+      expect(testPatternMatch('obsolete_sql_mode_in_dump',
+        "SET @@GLOBAL.sql_mode='STRICT_TRANS_TABLES,DB2'")).toBe(true);
+    });
+
+    it('should have correct rule metadata', () => {
+      const rule = compatibilityRules.find(r => r.id === 'obsolete_sql_mode_in_dump');
+      expect(rule?.type).toBe('query');
+      expect(rule?.category).toBe('invalidObjects');
+      expect(rule?.severity).toBe('error');
+      expect(rule?.mysqlShellCheckId).toBe('obsoleteSqlModeFlags_dump');
+    });
   });
 
   describe('GROUP BY ASC/DESC detection', () => {

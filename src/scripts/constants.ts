@@ -127,6 +127,8 @@ export const DEPRECATED_FUNCTIONS_84 = [
 // ============================================================================
 // 6. OBSOLETE SQL MODES
 // ============================================================================
+// SQL modes removed in MySQL 8.0 (will cause ERROR 1231 if present in config files or dump files)
+// All entries were removed in MySQL 8.0 GA release window (8.0.0-8.0.11)
 export const OBSOLETE_SQL_MODES = [
   'DB2',
   'MAXDB',
@@ -135,6 +137,7 @@ export const OBSOLETE_SQL_MODES = [
   'MYSQL40',
   'ORACLE',
   'POSTGRESQL',
+  'NO_AUTO_CREATE_USER',
   'NO_FIELD_OPTIONS',
   'NO_KEY_OPTIONS',
   'NO_TABLE_OPTIONS'
