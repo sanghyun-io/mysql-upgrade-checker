@@ -28,9 +28,25 @@ export const REMOVED_SYS_VARS_84 = [
   'innodb_api_enable_binlog',
   'innodb_api_enable_mdl',
   'innodb_api_trx_level',
+  'keyring_aws_cmk_id',
+  'keyring_aws_conf_file',
+  'keyring_aws_data_file',
+  'keyring_aws_region',
   'keyring_encrypted_file_data',
   'keyring_encrypted_file_password',
   'keyring_file_data',
+  'keyring_hashicorp_auth_path',
+  'keyring_hashicorp_ca_path',
+  'keyring_hashicorp_caching',
+  'keyring_hashicorp_commit_auth_path',
+  'keyring_hashicorp_commit_caching',
+  'keyring_hashicorp_commit_role_id',
+  'keyring_hashicorp_commit_server_url',
+  'keyring_hashicorp_commit_store_path',
+  'keyring_hashicorp_role_id',
+  'keyring_hashicorp_secret_id',
+  'keyring_hashicorp_server_url',
+  'keyring_hashicorp_store_path',
   'keyring_oci_ca_certificate',
   'keyring_oci_compartment',
   'keyring_oci_encryption_endpoint',
@@ -43,16 +59,31 @@ export const REMOVED_SYS_VARS_84 = [
   'keyring_oci_user',
   'keyring_oci_vaults_endpoint',
   'keyring_oci_virtual_vault',
+  'keyring_okv_conf_dir',
   'language',
   'log_bin_use_v1_row_events',
+  'log_slave_updates',
   'master_info_repository',
+  'master_verify_checksum',
   'new',
   'old',
+  'old_alter_table',
   'old_style_user_limits',
+  'relay_log_info_file',
   'relay_log_info_repository',
+  'replica_compressed_protocol',
+  'replica_parallel_type',
   'show_old_temporals',
+  'slave_compressed_protocol',
+  'slave_parallel_type',
   'slave_rows_search_algorithms',
+  'sql_slave_skip_counter',
+  'sync_master_info',
+  'sync_relay_log',
+  'sync_relay_log_info',
   'transaction_write_set_extraction',
+  'binlog_format',
+  'group_replication_ip_allowlist',
   'authentication_fido_rp_id',
   'innodb_log_file_size',
   'innodb_log_files_in_group'
@@ -118,7 +149,8 @@ export const REMOVED_FUNCTIONS_84 = [
 // Deprecated functions (not yet removed)
 export const DEPRECATED_FUNCTIONS_84 = [
   'FOUND_ROWS',
-  'SQL_CALC_FOUND_ROWS'
+  'SQL_CALC_FOUND_ROWS',
+  'MASTER_POS_WAIT'
 ] as const;
 
 // ============================================================================
@@ -134,7 +166,8 @@ export const OBSOLETE_SQL_MODES = [
   'POSTGRESQL',
   'NO_FIELD_OPTIONS',
   'NO_KEY_OPTIONS',
-  'NO_TABLE_OPTIONS'
+  'NO_TABLE_OPTIONS',
+  'NO_AUTO_CREATE_USER'
 ] as const;
 
 // ============================================================================

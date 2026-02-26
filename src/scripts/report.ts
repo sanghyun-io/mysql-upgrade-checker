@@ -4,6 +4,7 @@
  */
 
 import type { Issue, RuleCategory, AnalysisResults } from './types';
+import { sanitizeSQLComment } from './security/sanitizer';
 
 // ============================================================================
 // MySQL Shell Compatible Report Format
@@ -120,7 +121,7 @@ export function generateCSVReport(issues: Issue[]): string {
     issue.title,
     issue.description,
     issue.location || '',
-    issue.code ? issue.code.replace(/"/g, '""') : '',
+    issue.code ?? '',
     issue.suggestion,
     issue.mysqlShellCheckId || ''
   ]);
@@ -183,14 +184,14 @@ export function generateFixQueriesSQL(issues: Issue[]): string {
   categoryGroups.forEach((categoryIssues, category) => {
     const categoryLabel = getCategoryLabel(category);
     lines.push('-- ============================================================================');
-    lines.push(`-- ${categoryLabel}`);
+    lines.push(`-- ${sanitizeSQLComment(categoryLabel)}`);
     lines.push('-- ============================================================================');
     lines.push('');
 
     categoryIssues.forEach((issue, index) => {
-      lines.push(`-- Fix ${index + 1}: ${issue.title}`);
+      lines.push(`-- Fix ${index + 1}: ${sanitizeSQLComment(issue.title)}`);
       if (issue.location) {
-        lines.push(`-- Location: ${issue.location}`);
+        lines.push(`-- Location: ${sanitizeSQLComment(issue.location)}`);
       }
       lines.push(issue.fixQuery!);
       lines.push('');

@@ -2,7 +2,7 @@ import { FileAnalyzer } from './analyzer';
 import { UIManager, copyToClipboard } from './ui';
 import type { AnalysisResults, Issue, AnalysisProgress } from './types';
 import { CHECK_GUIDE, SERVER_REQUIRED_CHECKS, COMBINED_SERVER_CHECK_QUERY } from './constants';
-import { parseServerResult, type ServerQueryResult } from './parsers/server-result-parser';
+import { analyzeServerResult as analyzeServerResultFromModule } from './analysis/server-result-analyzer';
 import { showSuccess, showError, showInfo } from './toast';
 import {
   generateMySQLShellReport,
@@ -11,6 +11,7 @@ import {
   generateFixQueriesSQL,
   downloadFile
 } from './report';
+
 
 let uploadedFiles: File[] = [];
 let analysisResults: AnalysisResults = {
@@ -264,10 +265,11 @@ if (serverResultInput) {
 }
 
 function analyzeServerResult(content: string, fileName: string): void {
-  let result: ServerQueryResult;
-
+  // Delegate to the dedicated server-result-analyzer module which handles
+  // parsing, type detection, and issue generation in one place.
+  let serverIssues: Issue[];
   try {
-    result = parseServerResult(content);
+    serverIssues = analyzeServerResultFromModule(content);
   } catch (error) {
     showError('파일 형식을 인식할 수 없습니다. JSON 또는 TSV 형식으로 저장해주세요.', {
       errorType: 'FILE_FORMAT_ERROR',
@@ -277,14 +279,6 @@ function analyzeServerResult(content: string, fileName: string): void {
     return;
   }
 
-  if (result.rows.length === 0) {
-    showInfo('서버 결과 파일이 비어있거나 데이터가 없습니다.');
-    return;
-  }
-
-  // Detect check type from result structure
-  const serverIssues = analyzeServerQueryData(result);
-
   if (serverIssues.length === 0) {
     showSuccess('서버 검사 결과: 문제가 발견되지 않았습니다!');
   } else {
@@ -292,7 +286,7 @@ function analyzeServerResult(content: string, fileName: string): void {
     const serverResults: AnalysisResults = {
       issues: serverIssues,
       stats: {
-        safe: serverIssues.length === 0 ? 1 : 0,
+        safe: 0,
         error: serverIssues.filter((i) => i.severity === 'error').length,
         warning: serverIssues.filter((i) => i.severity === 'warning').length,
         info: serverIssues.filter((i) => i.severity === 'info').length
@@ -308,60 +302,6 @@ function analyzeServerResult(content: string, fileName: string): void {
     uiManager.displayResults(serverResults);
     showInfo(`서버 검사 완료: ${serverIssues.length}개의 문제가 발견되었습니다.`);
   }
-}
-
-/**
- * Analyze server query data and detect issues
- */
-function analyzeServerQueryData(result: ServerQueryResult): Issue[] {
-  const issues: Issue[] = [];
-
-  // Detect check type from column names
-  const columns = result.columns.map(c => c.toLowerCase());
-
-  // Check for user authentication data (User, Host, plugin)
-  if (columns.includes('user') && columns.includes('plugin')) {
-    const authIssues = fileAnalyzer.analyzeUserAuthPlugins(result);
-    issues.push(...authIssues);
-  }
-
-  // Check for system variable data (VARIABLE_NAME, VARIABLE_VALUE)
-  if (columns.includes('variable_name') && columns.includes('variable_value')) {
-    const sysvarIssues = fileAnalyzer.analyzeSysVarDefaults(result);
-    issues.push(...sysvarIssues);
-  }
-
-  // Handle combined query format with check_type column
-  if (columns.includes('check_type')) {
-    for (const row of result.rows) {
-      const checkType = String(row.check_type || row.CHECK_TYPE);
-
-      if (checkType === 'user_auth') {
-        // Extract user auth data
-        const userResult: ServerQueryResult = {
-          columns: ['User', 'Host', 'plugin'],
-          rows: [{
-            User: row.user_name || row.User,
-            Host: row.host || row.Host,
-            plugin: row.auth_plugin || row.plugin
-          }]
-        };
-        issues.push(...fileAnalyzer.analyzeUserAuthPlugins(userResult));
-      } else if (checkType === 'sys_vars') {
-        // Extract system variable data
-        const sysvarResult: ServerQueryResult = {
-          columns: ['VARIABLE_NAME', 'VARIABLE_VALUE'],
-          rows: [{
-            VARIABLE_NAME: row.var_name || row.VARIABLE_NAME,
-            VARIABLE_VALUE: row.var_value || row.VARIABLE_VALUE
-          }]
-        };
-        issues.push(...fileAnalyzer.analyzeSysVarDefaults(sysvarResult));
-      }
-    }
-  }
-
-  return issues;
 }
 
 // DOM Elements
@@ -408,38 +348,6 @@ document.body.appendChild(folderInput);
   document.getElementById('resultsSection')!.classList.remove('show');
   document.getElementById('progressSection')!.classList.remove('show');
   folderInput.value = '';
-};
-
-(window as any).exportReport = () => {
-  const report = {
-    ...analysisResults,
-    exportedAt: new Date().toISOString(),
-    version: '1.0.0'
-  };
-
-  downloadJSON(report, `mysql-upgrade-report-${new Date().toISOString().split('T')[0]}.json`);
-};
-
-(window as any).exportAllFixQueries = () => {
-  const queries = analysisResults.issues
-    .filter((issue) => issue.fixQuery)
-    .map((issue) => {
-      return `-- ${issue.title}\n-- 위치: ${issue.location}\n${issue.fixQuery}\n`;
-    })
-    .join('\n\n');
-
-  if (queries) {
-    const content = [
-      `-- MySQL 8.0 to 8.4 업그레이드 수정 쿼리\n`,
-      `-- 생성일시: ${new Date().toISOString()}\n`,
-      `-- 총 ${analysisResults.issues.filter((i) => i.fixQuery).length}개의 수정 쿼리\n\n`,
-      queries
-    ].join('');
-
-    downloadText(content, `mysql-upgrade-fix-queries-${new Date().toISOString().split('T')[0]}.sql`);
-  } else {
-    showInfo('생성할 수정 쿼리가 없습니다.');
-  }
 };
 
 // Event Listeners
@@ -518,12 +426,6 @@ function detectFileType(fileName: string): string {
   return 'unknown';
 }
 
-function downloadJSON(data: any, filename: string): void {
-  const blob = new Blob([JSON.stringify(data, null, 2)], {
-    type: 'application/json;charset=utf-8'
-  });
-  downloadBlob(blob, filename);
-}
 
 function downloadText(content: string, filename: string): void {
   const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });

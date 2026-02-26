@@ -20,9 +20,14 @@ import type {
   ZerofillColumnMap
 } from './types';
 import { compatibilityRules } from './rules';
-import { REMOVED_SYS_VARS_84, SYS_VARS_NEW_DEFAULTS_84, CHANGED_FUNCTIONS_IN_GENERATED_COLUMNS, NEW_RESERVED_KEYWORDS_84 } from './constants';
+import { REMOVED_SYS_VARS_84, CHANGED_FUNCTIONS_IN_GENERATED_COLUMNS, NEW_RESERVED_KEYWORDS_84 } from './constants';
 import { parseCreateTable } from './parsers/table-parser';
 import { extractUsers } from './parsers/user-parser';
+import { FKGraphBuilder } from './analysis/fk-graph';
+import { analyzeCharsetCascade } from './analysis/charset-cascade';
+import { enrichIssuesWithFixOptions } from './fix-options/generator';
+import type { AnalysisContext } from './domain/analysis-context';
+import { escapeIdentifier } from './security/sql-escape';
 
 // Callback types for real-time updates
 export type OnIssueCallback = (issue: Issue) => void;
@@ -67,6 +72,20 @@ export class FileAnalyzer {
   // Files content cache for 2-pass analysis
   private fileContentsCache: Map<string, string> = new Map();
 
+  // Task 2: FK graph and parsed table info for context-aware analysis
+  private fkGraph: FKGraphBuilder = new FKGraphBuilder();
+  private tableInfoMap: Map<string, TableInfo> = new Map();
+
+  /** Get the analysis context after analyzeFiles() completes (defensive copy) */
+  getAnalysisContext(): AnalysisContext {
+    const ctx: AnalysisContext = {
+      fkGraph: this.fkGraph,
+      tableInfos: new Map(this.tableInfoMap),
+      issues: [...this.results.issues],
+    };
+    return Object.freeze(ctx);
+  }
+
   // Set callbacks for real-time updates
   setCallbacks(onIssue: OnIssueCallback | null, onProgress: OnProgressCallback | null): void {
     this.onIssue = onIssue;
@@ -108,6 +127,8 @@ export class FileAnalyzer {
     this.tableCharsetMap.clear();
     this.pendingFKChecks = [];
     this.fileContentsCache.clear();
+    this.tableInfoMap.clear();
+    this.fkGraph = new FKGraphBuilder();
 
     // ========================================================================
     // PASS 1: Collect table index and charset information from all SQL files
@@ -165,6 +186,26 @@ export class FileAnalyzer {
     // PASS 2.6: Validate VIEW references (orphaned objects check)
     // ========================================================================
     this.validateViewReferences();
+
+    // ========================================================================
+    // PASS 2.7: Build FK dependency graph
+    // ========================================================================
+    this.buildFKGraph();
+
+    // ========================================================================
+    // PASS 2.8: Charset cascade analysis (FK charset mismatch detection)
+    // ========================================================================
+    this.analyzeCharsetCascades();
+
+    // ========================================================================
+    // PASS 2.9: Enrich issues with FK and column context
+    // ========================================================================
+    this.enrichIssuesWithContext();
+
+    // ========================================================================
+    // PASS 2.10: Generate multi-option fix strategies for all issues
+    // ========================================================================
+    enrichIssuesWithFixOptions(this.results.issues);
 
     // Clean up cache
     this.fileContentsCache.clear();
@@ -843,6 +884,9 @@ export class FileAnalyzer {
     for (const match of matches) {
       const table = parseCreateTable(match[0]);
       if (table) {
+        // Store parsed table info for FK graph building (Pass 2.7)
+        this.tableInfoMap.set(table.name.toLowerCase(), table);
+
         // Check table engine compatibility
         this.checkTableEngine(table, fileName);
 
@@ -962,7 +1006,7 @@ export class FileAnalyzer {
       code: `CREATE TABLE ${tableName}`,
       mysqlShellCheckId: 'tablesWithFtsPrefix',
       docLink: 'https://dev.mysql.com/doc/refman/8.4/en/innodb-fulltext-index.html',
-      fixQuery: `ALTER TABLE \`${tableName}\` RENAME TO \`${tableName.replace(/^FTS_/i, '')}\`;`
+      fixQuery: `ALTER TABLE ${escapeIdentifier(tableName)} RENAME TO ${escapeIdentifier(tableName.replace(/^FTS_/i, ''))};`
     });
   }
 
@@ -986,7 +1030,7 @@ export class FileAnalyzer {
         location: fileName,
         tableName: table.name,
         code: `CREATE TABLE ${table.name}`,
-        fixQuery: `ALTER TABLE \`${table.name}\` RENAME TO \`${table.name}_renamed\`;`,
+        fixQuery: `ALTER TABLE ${escapeIdentifier(table.name)} RENAME TO ${escapeIdentifier(table.name + '_renamed')};`,
         mysqlShellCheckId: 'reservedKeywords'
       });
     }
@@ -1007,7 +1051,7 @@ export class FileAnalyzer {
           tableName: table.name,
           columnName: column.name,
           code: `${column.name} ${column.type}`,
-          fixQuery: `ALTER TABLE \`${table.name}\` CHANGE COLUMN \`${column.name}\` \`${column.name}_renamed\` ${column.type};`,
+          fixQuery: `ALTER TABLE ${escapeIdentifier(table.name)} CHANGE COLUMN ${escapeIdentifier(column.name)} ${escapeIdentifier(column.name + '_renamed')} ${column.type};`,
           mysqlShellCheckId: 'reservedKeywords'
         });
       }
@@ -1089,7 +1133,7 @@ export class FileAnalyzer {
         location: fileName,
         tableName: table.name,
         code: `ENGINE=${engine}`,
-        fixQuery: `ALTER TABLE \`${table.name}\` ENGINE=InnoDB;`
+        fixQuery: `ALTER TABLE ${escapeIdentifier(table.name)} ENGINE=InnoDB;`
       });
     }
 
@@ -1104,7 +1148,7 @@ export class FileAnalyzer {
             location: fileName,
             tableName: table.name,
             code: `CHARSET=${table.charset}`,
-            fixQuery: `ALTER TABLE \`${table.name}\` CONVERT TO CHARACTER SET utf8mb4;`
+            fixQuery: `ALTER TABLE ${escapeIdentifier(table.name)} CONVERT TO CHARACTER SET utf8mb4;`
           });
         }
       }
@@ -1133,7 +1177,7 @@ export class FileAnalyzer {
           columnName: column.name,
           columnType: column.type,
           code: `${column.name} ${column.type}`,
-          fixQuery: `ALTER TABLE \`${table.name}\` MODIFY COLUMN \`${column.name}\` YEAR(4);`
+          fixQuery: `ALTER TABLE ${escapeIdentifier(table.name)} MODIFY COLUMN ${escapeIdentifier(column.name)} YEAR(4);`
         });
       }
 
@@ -1147,7 +1191,7 @@ export class FileAnalyzer {
             tableName: table.name,
             columnName: column.name,
             code: `${column.name} DEFAULT '${column.default}'`,
-            fixQuery: `ALTER TABLE \`${table.name}\` MODIFY COLUMN \`${column.name}\` ${column.type} DEFAULT NULL;`
+            fixQuery: `ALTER TABLE ${escapeIdentifier(table.name)} MODIFY COLUMN ${escapeIdentifier(column.name)} ${column.type} DEFAULT NULL;`
           });
         }
       }
@@ -1164,7 +1208,7 @@ export class FileAnalyzer {
               tableName: table.name,
               columnName: column.name,
               code: `${column.name} CHARACTER SET ${column.charset}`,
-              fixQuery: `ALTER TABLE \`${table.name}\` MODIFY COLUMN \`${column.name}\` ${column.type} CHARACTER SET utf8mb4;`
+              fixQuery: `ALTER TABLE ${escapeIdentifier(table.name)} MODIFY COLUMN ${escapeIdentifier(column.name)} ${column.type} CHARACTER SET utf8mb4;`
             });
           }
         }
@@ -1241,7 +1285,7 @@ export class FileAnalyzer {
         code: `ENGINE=${table.engine}, PARTITION BY ${table.partitions[0]?.type || 'UNKNOWN'}`,
         mysqlShellCheckId: 'nonNativePartitioning',
         docLink: 'https://dev.mysql.com/doc/refman/8.4/en/partitioning-limitations.html',
-        fixQuery: `ALTER TABLE \`${table.name}\` ENGINE=InnoDB;`
+        fixQuery: `ALTER TABLE ${escapeIdentifier(table.name)} ENGINE=InnoDB;`
       });
     }
 
@@ -1260,7 +1304,7 @@ export class FileAnalyzer {
         code: `TABLESPACE=${table.tablespace} PARTITION BY ${table.partitions[0]?.type || 'UNKNOWN'}`,
         mysqlShellCheckId: 'partitionedTablesInSharedTablespaces',
         docLink: 'https://dev.mysql.com/doc/refman/8.4/en/partitioning-limitations.html',
-        fixQuery: `ALTER TABLE \`${table.name}\` TABLESPACE = innodb_file_per_table;`
+        fixQuery: `ALTER TABLE ${escapeIdentifier(table.name)} TABLESPACE = innodb_file_per_table;`
       });
     }
 
@@ -1297,7 +1341,7 @@ export class FileAnalyzer {
           code: `PARTITION ${partition.name} TABLESPACE=${partition.tablespace}`,
           mysqlShellCheckId: 'partitionedTablesInSharedTablespaces',
           docLink: 'https://dev.mysql.com/doc/refman/8.4/en/partitioning-limitations.html',
-          fixQuery: `ALTER TABLE \`${table.name}\` REORGANIZE PARTITION \`${partition.name}\` INTO (PARTITION \`${partition.name}\` TABLESPACE = innodb_file_per_table);`
+          fixQuery: `ALTER TABLE ${escapeIdentifier(table.name)} REORGANIZE PARTITION ${escapeIdentifier(partition.name)} INTO (PARTITION ${escapeIdentifier(partition.name)} TABLESPACE = innodb_file_per_table);`
         });
       }
     }
@@ -1607,10 +1651,10 @@ export class FileAnalyzer {
     }
 
     // Date/Time types
+    if (type.includes('DATETIME')) return 8;   // Must come before DATE and TIME
+    if (type.includes('TIMESTAMP')) return 4;  // Must come before TIME
     if (type.includes('DATE')) return 3;
     if (type.includes('TIME')) return 3;
-    if (type.includes('DATETIME')) return 8;
-    if (type.includes('TIMESTAMP')) return 4;
     if (type.includes('YEAR')) return 1;
 
     // Binary/Blob
@@ -1679,12 +1723,12 @@ export class FileAnalyzer {
       // Only add prefix for string columns (large bytes typically mean string)
       if (d.bytes > 100) {
         const suggestedPrefix = Math.floor(d.bytes * ratio / 4); // Assuming utf8mb4
-        return `\`${d.column}\`(${Math.min(suggestedPrefix, 191)})`;
+        return `${escapeIdentifier(d.column)}(${Math.min(suggestedPrefix, 191)})`;
       }
-      return `\`${d.column}\``;
+      return escapeIdentifier(d.column);
     });
 
-    return `ALTER TABLE \`${tableName}\` DROP INDEX \`${indexName}\`, ADD INDEX \`${indexName}\` (${prefixedColumns.join(', ')});`;
+    return `ALTER TABLE ${escapeIdentifier(tableName)} DROP INDEX ${escapeIdentifier(indexName)}, ADD INDEX ${escapeIdentifier(indexName)} (${prefixedColumns.join(', ')});`;
   }
 
   /**
@@ -1707,7 +1751,7 @@ export class FileAnalyzer {
           location: fileName,
           tableName: table.name,
           code: `CONSTRAINT ${fk.name.substring(0, 50)}...`,
-          fixQuery: `ALTER TABLE \`${table.name}\` DROP FOREIGN KEY \`${fk.name}\`, ADD CONSTRAINT \`fk_${table.name.substring(0, 20)}_${fk.columns[0]}\` FOREIGN KEY (${fk.columns.map(c => `\`${c}\``).join(', ')}) REFERENCES \`${fk.refTable}\`(${fk.refColumns.map(c => `\`${c}\``).join(', ')});`,
+          fixQuery: `ALTER TABLE ${escapeIdentifier(table.name)} DROP FOREIGN KEY ${escapeIdentifier(fk.name)}, ADD CONSTRAINT ${escapeIdentifier('fk_' + table.name.substring(0, 20) + '_' + fk.columns[0])} FOREIGN KEY (${fk.columns.map(c => escapeIdentifier(c)).join(', ')}) REFERENCES ${escapeIdentifier(fk.refTable)}(${fk.refColumns.map(c => escapeIdentifier(c)).join(', ')});`,
           mysqlShellCheckId: 'foreignKeyConstraintNames'
         });
       }
@@ -1768,7 +1812,7 @@ export class FileAnalyzer {
           tableName: fkCheck.sourceTable,
           code: fkCheck.code,
           mysqlShellCheckId: 'foreignKeyReferences',
-          fixQuery: `ALTER TABLE \`${fkCheck.refTable}\` ADD UNIQUE INDEX \`idx_${fkCheck.refColumns.join('_')}\` (\`${fkCheck.refColumns.join('`, `')}\`);`
+          fixQuery: `ALTER TABLE ${escapeIdentifier(fkCheck.refTable)} ADD UNIQUE INDEX ${escapeIdentifier('idx_' + fkCheck.refColumns.join('_'))} (${fkCheck.refColumns.map(c => escapeIdentifier(c)).join(', ')});`
         });
       }
       // If hasProperIndex is true, no issue is added - the FK is valid
@@ -1901,6 +1945,159 @@ export class FileAnalyzer {
           code: viewCheck.code,
           mysqlShellCheckId: 'orphanedObjects'
         });
+      }
+    }
+  }
+
+  // ==========================================================================
+  // PASS 2.7: FK GRAPH BUILDING
+  // ==========================================================================
+
+  /**
+   * Build the FK dependency graph from all collected table info.
+   */
+  private buildFKGraph(): void {
+    this.fkGraph.buildFromTableInfos(this.tableInfoMap);
+
+    // Missing reference tables are already reported in validateForeignKeyReferences (fk_ref_table_not_found)
+
+    // Generate issues for cyclic FK dependencies
+    if (this.fkGraph.hasCycle()) {
+      const sccs = this.fkGraph.getSCCs().filter(scc => scc.length > 1);
+      for (const scc of sccs) {
+        this.addIssue({
+          id: 'fk_circular_dependency',
+          type: 'schema',
+          category: 'invalidObjects',
+          severity: 'warning',
+          title: 'FK 순환 참조 감지',
+          description: `다음 테이블들이 순환 FK 참조를 형성합니다: ${scc.join(' ↔ ')}. 마이그레이션 시 FK를 일시 비활성화해야 합니다.`,
+          suggestion: 'SET FOREIGN_KEY_CHECKS = 0; 으로 FK를 비활성화한 후 ALTER TABLE을 실행하세요.',
+          location: 'FK Graph Analysis',
+          code: `Circular: ${scc.join(' -> ')} -> ${scc[0]}`,
+          fkContext: {
+            relatedTables: scc,
+            isChildTable: false,
+            hasCycle: true,
+          },
+        });
+      }
+    }
+
+    // Emit issues for self-referencing FK tables
+    const selfRefTables = this.fkGraph.getSelfRefTables();
+    for (const tableName of selfRefTables) {
+      this.addIssue({
+        id: 'fk_self_reference',
+        type: 'schema',
+        category: 'invalidObjects',
+        severity: 'info',
+        title: 'FK 자기 참조 감지',
+        description: `테이블 '${tableName}'이(가) 자기 자신을 참조하는 FK를 가지고 있습니다. ALTER TABLE 시 FK를 일시 비활성화해야 합니다.`,
+        suggestion: 'SET FOREIGN_KEY_CHECKS = 0; 으로 FK를 비활성화한 후 ALTER TABLE을 실행하세요.',
+        location: 'FK Graph Analysis',
+        tableName: tableName,
+        fkContext: {
+          relatedTables: [tableName],
+          isChildTable: true,
+          hasCycle: true,
+        },
+      });
+    }
+  }
+
+  // ==========================================================================
+  // PASS 2.8: CHARSET CASCADE ANALYSIS
+  // ==========================================================================
+
+  /**
+   * Analyze FK relationships for charset/collation mismatches.
+   */
+  private analyzeCharsetCascades(): void {
+    const charsetIssues = analyzeCharsetCascade(this.tableInfoMap, this.fkGraph);
+    for (const issue of charsetIssues) {
+      this.addIssue(issue);
+    }
+  }
+
+  // ==========================================================================
+  // PASS 2.9: ENRICH ISSUES WITH CONTEXT
+  // ==========================================================================
+
+  /**
+   * Enrich existing issues with FK context and column context.
+   */
+  private enrichIssuesWithContext(): void {
+    // Precompute graph data once (Issue #5 fix: avoid repeated traversals)
+    const sccs = this.fkGraph.getSCCs();
+    const selfRefTables = this.fkGraph.getSelfRefTables();
+    const missingTables = this.fkGraph.getMissingTables();
+
+    // Build per-table cycle membership set
+    const cycleMembers = new Set<string>();
+    for (const scc of sccs) {
+      if (scc.length > 1) {
+        for (const t of scc) cycleMembers.add(t);
+      }
+    }
+    for (const t of selfRefTables) cycleMembers.add(t);
+
+    // Cache per-table context to avoid redundant BFS calls
+    const tableContextCache = new Map<string, {
+      relatedTables: string[];
+      isChild: boolean;
+      inCycle: boolean;
+      hasMissingRef: boolean;
+    }>();
+
+    const getTableContext = (tableName: string) => {
+      if (tableContextCache.has(tableName)) return tableContextCache.get(tableName)!;
+
+      const relatedTables = this.fkGraph.getRelatedTables(tableName);
+      const isChild = this.fkGraph.getParents(tableName).size > 0;
+      const inCycle = cycleMembers.has(tableName);
+      const tableInfo = this.tableInfoMap.get(tableName);
+      const hasMissingRef = tableInfo?.foreignKeys.some(
+        fk => missingTables.has(fk.refTable.toLowerCase())
+      ) ?? false;
+
+      const ctx = { relatedTables: [...relatedTables], isChild, inCycle, hasMissingRef };
+      tableContextCache.set(tableName, ctx);
+      return ctx;
+    };
+
+    for (const issue of this.results.issues) {
+      // Skip issues that already have context (e.g., charset cascade issues)
+      if (issue.fkContext || issue.columnContext) continue;
+
+      const tableName = issue.tableName?.toLowerCase();
+      if (!tableName) continue;
+
+      // Add FK context if the table has FK relationships
+      if (this.fkGraph.hasRelationships(tableName)) {
+        const ctx = getTableContext(tableName);
+        issue.fkContext = {
+          relatedTables: ctx.relatedTables,
+          isChildTable: ctx.isChild,
+          hasCycle: ctx.inCycle || undefined,
+          missingReference: ctx.hasMissingRef || undefined,
+        };
+      }
+
+      // Add column context for column-specific issues
+      if (issue.columnName && tableName) {
+        const tableInfo = this.tableInfoMap.get(tableName);
+        if (tableInfo) {
+          const column = tableInfo.columns.find(
+            c => c.name.toLowerCase() === issue.columnName!.toLowerCase()
+          );
+          if (column) {
+            issue.columnContext = {
+              nullable: column.nullable,
+              hasDefault: column.default !== undefined,
+            };
+          }
+        }
       }
     }
   }
@@ -2039,123 +2236,9 @@ export class FileAnalyzer {
   // ==========================================================================
   // SERVER QUERY RESULT ANALYSIS
   // ==========================================================================
-
-  /**
-   * Analyze server query result based on check ID
-   */
-  analyzeServerQueryResult(checkId: string, result: { columns: string[]; rows: Record<string, string | number | null>[] }): Issue[] {
-    switch (checkId) {
-      case 'checkSysVarDefaults':
-        return this.analyzeSysVarDefaults(result);
-      case 'authMethodUsage':
-      case 'deprecatedDefaultAuth':
-      case 'pluginUsage':
-        return this.analyzeUserAuthPlugins(result);
-      default:
-        return [];
-    }
-  }
-
-  /**
-   * Analyze user authentication plugins from server query result
-   */
-  analyzeUserAuthPlugins(result: { columns: string[]; rows: Record<string, string | number | null>[] }): Issue[] {
-    const issues: Issue[] = [];
-
-    for (const row of result.rows) {
-      const userName = row.User || row.user_name || row.user;
-      const host = row.Host || row.host;
-      const plugin = row.plugin || row.auth_plugin;
-
-      if (!userName || !plugin) continue;
-
-      const userHost = `${userName}@${host}`;
-
-      // Check for mysql_native_password
-      if (plugin === 'mysql_native_password') {
-        const rule = compatibilityRules.find(r => r.id === 'mysql_native_password');
-        if (rule) {
-          issues.push({
-            ...rule,
-            location: `mysql.user: ${userHost}`,
-            code: `IDENTIFIED WITH ${plugin}`,
-            userName: String(userName),
-            fixQuery: rule.generateFixQuery?.({ userName: String(userName) }) || null
-          });
-        }
-      }
-
-      // Check for sha256_password
-      if (plugin === 'sha256_password') {
-        const rule = compatibilityRules.find(r => r.id === 'sha256_password');
-        if (rule) {
-          issues.push({
-            ...rule,
-            location: `mysql.user: ${userHost}`,
-            code: `IDENTIFIED WITH ${plugin}`,
-            userName: String(userName)
-          });
-        }
-      }
-
-      // Check for authentication_fido
-      if (plugin && String(plugin).includes('authentication_fido')) {
-        const rule = compatibilityRules.find(r => r.id === 'authentication_fido');
-        if (rule) {
-          issues.push({
-            ...rule,
-            location: `mysql.user: ${userHost}`,
-            code: `IDENTIFIED WITH ${plugin}`,
-            userName: String(userName)
-          });
-        }
-      }
-    }
-
-    return issues;
-  }
-
-  /**
-   * Analyze system variable default values from server query result
-   */
-  analyzeSysVarDefaults(result: { columns: string[]; rows: Record<string, string | number | null>[] }): Issue[] {
-    const issues: Issue[] = [];
-
-    for (const row of result.rows) {
-      const varName = String(row.VARIABLE_NAME || row.variable_name || '');
-      const varValue = row.VARIABLE_VALUE || row.variable_value;
-
-      if (!varName || varValue === null) continue;
-
-      // Check if this variable has a new default in 8.4
-      const varConfig = SYS_VARS_NEW_DEFAULTS_84[varName as keyof typeof SYS_VARS_NEW_DEFAULTS_84];
-      if (!varConfig) continue;
-
-      const [oldDefault, newDefault, _description] = varConfig;
-      const currentValue = String(varValue);
-
-      // If current value matches old default, it will change after upgrade
-      const matchesOldDefault =
-        (oldDefault === null && currentValue === '') ||
-        String(oldDefault).toLowerCase() === currentValue.toLowerCase();
-
-      if (matchesOldDefault) {
-        issues.push({
-          id: 'sysvar_new_default',
-          type: 'config',
-          category: 'newDefaultVars',
-          severity: 'warning',
-          title: `${varName} 기본값 변경`,
-          description: `시스템 변수 '${varName}'의 현재 값이 8.0 기본값(${oldDefault})입니다. 8.4 업그레이드 후 기본값이 ${newDefault}로 변경됩니다.`,
-          suggestion: `업그레이드 후 동작 변경을 원하지 않는다면, 설정 파일에 명시적으로 '${varName} = ${oldDefault}'를 추가하세요.`,
-          location: 'performance_schema.global_variables',
-          variableName: varName,
-          code: `${varName} = ${currentValue} (8.0 default: ${oldDefault}, 8.4 default: ${newDefault})`,
-          mysqlShellCheckId: 'sysVarsNewDefaults'
-        });
-      }
-    }
-
-    return issues;
-  }
+  // NOTE: Server result analysis has been moved to
+  // src/scripts/analysis/server-result-analyzer.ts (analyzeServerResult).
+  // The legacy methods below have been removed to eliminate dead code.
+  // Use analyzeServerResult() from that module for all server result analysis.
+  // ==========================================================================
 }

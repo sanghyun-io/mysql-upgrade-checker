@@ -1027,3 +1027,105 @@ describe('Constants Validation', () => {
     expect(REMOVED_FUNCTIONS_84).toContain('ENCRYPT');
   });
 });
+
+// ============================================================================
+// NEW RULES COVERAGE TESTS (Task 1: Rule Coverage Gap)
+// ============================================================================
+
+describe('New Keyring/Replication Removed System Variables', () => {
+  it('should detect keyring_hashicorp variables', () => {
+    expect(testPatternMatch('removed_sys_var', 'keyring_hashicorp_auth_path=/path')).toBe(true);
+    expect(testPatternMatch('removed_sys_var', 'keyring_hashicorp_server_url=http://vault')).toBe(true);
+    expect(testPatternMatch('removed_sys_var', 'keyring_hashicorp_role_id=abc123')).toBe(true);
+    expect(testPatternMatch('removed_sys_var', 'keyring_hashicorp_caching=ON')).toBe(true);
+  });
+
+  it('should detect keyring_aws variables', () => {
+    expect(testPatternMatch('removed_sys_var', 'keyring_aws_cmk_id=key-123')).toBe(true);
+    expect(testPatternMatch('removed_sys_var', 'keyring_aws_conf_file=/etc/keyring_aws.conf')).toBe(true);
+    expect(testPatternMatch('removed_sys_var', 'keyring_aws_region=us-east-1')).toBe(true);
+  });
+
+  it('should detect keyring_okv variable', () => {
+    expect(testPatternMatch('removed_sys_var', 'keyring_okv_conf_dir=/etc/okv')).toBe(true);
+  });
+
+  it('should detect replication removed variables', () => {
+    expect(testPatternMatch('removed_sys_var', 'binlog_format=ROW')).toBe(true);
+    expect(testPatternMatch('removed_sys_var', 'log_slave_updates=ON')).toBe(true);
+    expect(testPatternMatch('removed_sys_var', 'slave_parallel_type=LOGICAL_CLOCK')).toBe(true);
+    expect(testPatternMatch('removed_sys_var', 'replica_parallel_type=LOGICAL_CLOCK')).toBe(true);
+    expect(testPatternMatch('removed_sys_var', 'replica_compressed_protocol=ON')).toBe(true);
+    expect(testPatternMatch('removed_sys_var', 'sync_relay_log=10000')).toBe(true);
+    expect(testPatternMatch('removed_sys_var', 'sync_relay_log_info=10000')).toBe(true);
+    expect(testPatternMatch('removed_sys_var', 'sync_master_info=10000')).toBe(true);
+    expect(testPatternMatch('removed_sys_var', 'master_verify_checksum=ON')).toBe(true);
+    expect(testPatternMatch('removed_sys_var', 'old_alter_table=ON')).toBe(true);
+    expect(testPatternMatch('removed_sys_var', 'sql_slave_skip_counter=1')).toBe(true);
+    expect(testPatternMatch('removed_sys_var', 'relay_log_info_file=relay-log.info')).toBe(true);
+  });
+
+  it('should detect group_replication_ip_allowlist', () => {
+    expect(testPatternMatch('removed_sys_var', 'group_replication_ip_allowlist=AUTOMATIC')).toBe(true);
+  });
+
+  it('should have all keyring/replication vars in constants', () => {
+    const requiredVars = [
+      'keyring_hashicorp_auth_path', 'keyring_hashicorp_server_url',
+      'keyring_aws_cmk_id', 'keyring_aws_region',
+      'keyring_okv_conf_dir', 'binlog_format',
+      'log_slave_updates', 'slave_parallel_type',
+      'replica_parallel_type', 'sync_relay_log',
+      'group_replication_ip_allowlist'
+    ];
+    for (const v of requiredVars) {
+      expect(REMOVED_SYS_VARS_84).toContain(v);
+    }
+  });
+});
+
+describe('NO_AUTO_CREATE_USER SQL Mode', () => {
+  it('should detect NO_AUTO_CREATE_USER in sql_mode', () => {
+    expect(testPatternMatch('obsolete_sql_mode', "sql_mode=STRICT_TRANS_TABLES,NO_AUTO_CREATE_USER")).toBe(true);
+  });
+});
+
+describe('MASTER_POS_WAIT Deprecated Function', () => {
+  it('should detect MASTER_POS_WAIT usage', () => {
+    expect(testPatternMatch('deprecated_function_84', "SELECT MASTER_POS_WAIT('binlog.000001', 120)")).toBe(true);
+  });
+});
+
+describe('DEFINER Validation Rules', () => {
+  it('should detect DEFINER user in CREATE statements', () => {
+    expect(testPatternMatch(
+      'definer_user_check',
+      "CREATE DEFINER=`admin`@`localhost` PROCEDURE test_proc()"
+    )).toBe(true);
+  });
+
+  it('should NOT match CREATE TABLE (no DEFINER)', () => {
+    expect(testPatternMatch(
+      'definer_user_check',
+      "CREATE TABLE test (id INT)"
+    )).toBe(false);
+  });
+});
+
+describe('MEMORY/CSV Engine Warning Rules', () => {
+  it('should detect MEMORY engine usage', () => {
+    expect(testPatternMatch('memory_engine', "CREATE TABLE temp_data (id INT) ENGINE=MEMORY")).toBe(true);
+  });
+
+  it('should NOT detect InnoDB as MEMORY', () => {
+    expect(testPatternMatch('memory_engine', "CREATE TABLE data (id INT) ENGINE=InnoDB")).toBe(false);
+  });
+
+  it('should detect CSV engine usage', () => {
+    expect(testPatternMatch('csv_engine', "CREATE TABLE logs (msg TEXT) ENGINE=CSV")).toBe(true);
+  });
+
+  it('should NOT detect InnoDB as CSV', () => {
+    expect(testPatternMatch('csv_engine', "CREATE TABLE data (id INT) ENGINE=InnoDB")).toBe(false);
+  });
+});
