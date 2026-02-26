@@ -680,6 +680,48 @@ describe('Invalid Objects Rules', () => {
     it('should detect DB2 SQL mode', () => {
       expect(testPatternMatch('obsolete_sql_mode', 'sql_mode=DB2')).toBe(true);
     });
+
+    it('should detect NO_AUTO_CREATE_USER SQL mode in config file', () => {
+      expect(testPatternMatch('obsolete_sql_mode', 'sql_mode=STRICT_TRANS_TABLES,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION')).toBe(true);
+    });
+
+    it('should detect NO_AUTO_CREATE_USER alone in config file', () => {
+      expect(testPatternMatch('obsolete_sql_mode', 'sql_mode=NO_AUTO_CREATE_USER')).toBe(true);
+    });
+  });
+
+  describe('Obsolete SQL modes in SQL dump files', () => {
+    it('should detect NO_AUTO_CREATE_USER in SET sql_mode statement', () => {
+      expect(testPatternMatch('obsolete_sql_mode_in_dump',
+        "SET sql_mode='STRICT_TRANS_TABLES,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION'")).toBe(true);
+    });
+
+    it('should detect DB2 in SET sql_mode statement', () => {
+      expect(testPatternMatch('obsolete_sql_mode_in_dump',
+        "SET sql_mode='STRICT_TRANS_TABLES,DB2'")).toBe(true);
+    });
+
+    it('should detect ORACLE in SET sql_mode with double quotes', () => {
+      expect(testPatternMatch('obsolete_sql_mode_in_dump',
+        'SET sql_mode="STRICT_TRANS_TABLES,ORACLE"')).toBe(true);
+    });
+
+    it('should detect MAXDB in SET sql_mode with spaces around equals', () => {
+      expect(testPatternMatch('obsolete_sql_mode_in_dump',
+        "SET sql_mode = 'STRICT_TRANS_TABLES,MAXDB,NO_ENGINE_SUBSTITUTION'")).toBe(true);
+    });
+
+    it('should NOT match SET sql_mode with only valid modes', () => {
+      expect(testPatternMatch('obsolete_sql_mode_in_dump',
+        "SET sql_mode='STRICT_TRANS_TABLES,NO_ENGINE_SUBSTITUTION'")).toBe(false);
+    });
+
+    it('should have correct rule metadata', () => {
+      const rule = compatibilityRules.find(r => r.id === 'obsolete_sql_mode_in_dump');
+      expect(rule?.type).toBe('query');
+      expect(rule?.category).toBe('invalidObjects');
+      expect(rule?.severity).toBe('error');
+    });
   });
 
   describe('GROUP BY ASC/DESC detection', () => {
