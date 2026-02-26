@@ -111,6 +111,7 @@ Identifies system variables with changed defaults that may affect application be
 | `innodb_flush_method` | fsync | O_DIRECT | I/O optimization |
 | `innodb_io_capacity` | 200 | 10000 | SSD-optimized default |
 | `innodb_change_buffering` | all | none | Simplified change buffer |
+| `group_replication_consistency` | EVENTUAL | BEFORE_ON_PRIMARY_FAILOVER | Group Replication transaction consistency |
 
 ### 3. Authentication & Privileges
 

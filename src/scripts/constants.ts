@@ -385,16 +385,7 @@ SELECT
   VARIABLE_VALUE
 FROM performance_schema.global_variables
 WHERE VARIABLE_NAME IN (
-  'replica_parallel_workers',
-  'innodb_adaptive_hash_index',
-  'innodb_doublewrite_pages',
-  'innodb_flush_method',
-  'innodb_io_capacity',
-  'innodb_io_capacity_max',
-  'innodb_log_buffer_size',
-  'innodb_redo_log_capacity',
-  'innodb_change_buffering',
-  'group_replication_consistency'
+${Object.keys(SYS_VARS_NEW_DEFAULTS_84).map(k => `  '${k}'`).join(',\n')}
 );`;
 
 // ============================================================================
