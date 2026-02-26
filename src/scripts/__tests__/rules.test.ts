@@ -726,10 +726,21 @@ describe('Invalid Objects Rules', () => {
         "SET @@sql_mode='NO_AUTO_CREATE_USER'")).toBe(true);
     });
 
-    it('should detect obsolete mode in mysqldump multi-assignment form', () => {
+    it('should detect obsolete mode in mysqldump multi-assignment form (no spaces)', () => {
       // Common in mysqldump output: SET @OLD_SQL_MODE=@@SQL_MODE, SQL_MODE='...';
       expect(testPatternMatch('obsolete_sql_mode_in_dump',
         "SET @OLD_SQL_MODE=@@SQL_MODE, SQL_MODE='NO_AUTO_CREATE_USER,STRICT_TRANS_TABLES'")).toBe(true);
+    });
+
+    it('should detect obsolete mode in mysqldump multi-assignment form (with spaces)', () => {
+      // Formatter-altered: SET @OLD_SQL_MODE = @@SQL_MODE, SQL_MODE='...';
+      expect(testPatternMatch('obsolete_sql_mode_in_dump',
+        "SET @OLD_SQL_MODE = @@SQL_MODE, SQL_MODE='NO_AUTO_CREATE_USER'")).toBe(true);
+    });
+
+    it('should detect obsolete mode in @@GLOBAL.sql_mode form', () => {
+      expect(testPatternMatch('obsolete_sql_mode_in_dump',
+        "SET @@GLOBAL.sql_mode='STRICT_TRANS_TABLES,DB2'")).toBe(true);
     });
 
     it('should have correct rule metadata', () => {

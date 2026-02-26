@@ -212,7 +212,7 @@ export const invalidObjectsRules: CompatibilityRule[] = [
     type: 'query',
     category: 'invalidObjects',
     pattern: new RegExp(
-      `(?:SET\\s+(?:@@(?:SESSION\\.)?|@\\w+=@@\\w+,\\s*)?sql_mode\\s*=\\s*)['"][^'"]*\\b(${OBSOLETE_SQL_MODES.join('|')})\\b[^'"]*['"]`,
+      `(?:SET\\s+(?:@@(?:(?:SESSION|GLOBAL)\\.)?|@\\w+\\s*=\\s*@@\\w+\\s*,\\s*)?sql_mode\\s*=\\s*)['"][^'"]*\\b(${OBSOLETE_SQL_MODES.join('|')})\\b[^'"]*['"]`,
       'gi'
     ),
     severity: 'error',
