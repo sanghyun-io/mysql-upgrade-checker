@@ -118,6 +118,7 @@ export const REMOVED_FUNCTIONS_84 = [
 // Deprecated functions (not yet removed)
 export const DEPRECATED_FUNCTIONS_84 = [
   'FOUND_ROWS',
+  'MASTER_POS_WAIT',
   'SQL_CALC_FOUND_ROWS'
 ] as const;
 
