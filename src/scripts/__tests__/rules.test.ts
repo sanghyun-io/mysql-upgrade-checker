@@ -716,11 +716,28 @@ describe('Invalid Objects Rules', () => {
         "SET sql_mode='STRICT_TRANS_TABLES,NO_ENGINE_SUBSTITUTION'")).toBe(false);
     });
 
+    it('should detect obsolete mode in @@SESSION.sql_mode form', () => {
+      expect(testPatternMatch('obsolete_sql_mode_in_dump',
+        "SET @@SESSION.sql_mode='STRICT_TRANS_TABLES,NO_AUTO_CREATE_USER'")).toBe(true);
+    });
+
+    it('should detect obsolete mode in @@sql_mode form', () => {
+      expect(testPatternMatch('obsolete_sql_mode_in_dump',
+        "SET @@sql_mode='NO_AUTO_CREATE_USER'")).toBe(true);
+    });
+
+    it('should detect obsolete mode in mysqldump multi-assignment form', () => {
+      // Common in mysqldump output: SET @OLD_SQL_MODE=@@SQL_MODE, SQL_MODE='...';
+      expect(testPatternMatch('obsolete_sql_mode_in_dump',
+        "SET @OLD_SQL_MODE=@@SQL_MODE, SQL_MODE='NO_AUTO_CREATE_USER,STRICT_TRANS_TABLES'")).toBe(true);
+    });
+
     it('should have correct rule metadata', () => {
       const rule = compatibilityRules.find(r => r.id === 'obsolete_sql_mode_in_dump');
       expect(rule?.type).toBe('query');
       expect(rule?.category).toBe('invalidObjects');
       expect(rule?.severity).toBe('error');
+      expect(rule?.mysqlShellCheckId).toBe('obsoleteSqlModeFlags_dump');
     });
   });
 

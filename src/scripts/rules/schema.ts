@@ -203,16 +203,23 @@ export const invalidObjectsRules: CompatibilityRule[] = [
   },
 
   // Obsolete SQL Modes in SQL dump files (SET sql_mode = '...' statements)
+  // Handles common mysqldump output forms:
+  //   SET sql_mode='...'
+  //   SET @@SESSION.sql_mode='...'
+  //   SET @OLD_SQL_MODE=@@SQL_MODE, SQL_MODE='...'
   {
     id: 'obsolete_sql_mode_in_dump',
     type: 'query',
     category: 'invalidObjects',
-    pattern: new RegExp(`SET\\s+sql_mode\\s*=\\s*['"][^'"]*\\b(${OBSOLETE_SQL_MODES.join('|')})\\b[^'"]*['"]`, 'gi'),
+    pattern: new RegExp(
+      `(?:SET\\s+(?:@@(?:SESSION\\.)?|@\\w+=@@\\w+,\\s*)?sql_mode\\s*=\\s*)['"][^'"]*\\b(${OBSOLETE_SQL_MODES.join('|')})\\b[^'"]*['"]`,
+      'gi'
+    ),
     severity: 'error',
     title: '덤프 파일 내 폐기된 SQL 모드',
     description: `SET sql_mode 구문에 MySQL 8.0에서 제거된 SQL 모드가 포함되어 있습니다: ${OBSOLETE_SQL_MODES.join(', ')}`,
     suggestion: '해당 SQL 모드를 SET sql_mode 구문에서 제거하세요. 이 모드들은 MySQL 8.0부터 ERROR 1231을 유발합니다.',
-    mysqlShellCheckId: 'obsoleteSqlModeFlags'
+    mysqlShellCheckId: 'obsoleteSqlModeFlags_dump'
   },
 
   // GROUP BY ASC/DESC Syntax
