@@ -49,6 +49,7 @@ export const REMOVED_SYS_VARS_84 = [
   'new',
   'old',
   'old_style_user_limits',
+  'relay_log_info_file',
   'relay_log_info_repository',
   'show_old_temporals',
   'slave_rows_search_algorithms',
