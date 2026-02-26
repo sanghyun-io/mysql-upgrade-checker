@@ -116,10 +116,11 @@ export const REMOVED_FUNCTIONS_84 = [
 ] as const;
 
 // Deprecated functions (not yet removed)
+// Note: SQL_CALC_FOUND_ROWS is excluded here as it is already handled by the
+// dedicated 'sql_calc_found_rows' rule to avoid duplicate warnings.
 export const DEPRECATED_FUNCTIONS_84 = [
   'FOUND_ROWS',
-  'MASTER_POS_WAIT',
-  'SQL_CALC_FOUND_ROWS'
+  'MASTER_POS_WAIT'
 ] as const;
 
 // ============================================================================
