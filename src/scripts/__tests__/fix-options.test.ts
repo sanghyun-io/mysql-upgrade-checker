@@ -247,7 +247,7 @@ describe('generateFixOptions', () => {
   describe('type fix strategies', () => {
     it('should generate FLOAT and DECIMAL options', () => {
       const issue = makeIssue({
-        id: 'float_double_precision',
+        id: 'float_precision',
         tableName: 'measurements',
         columnName: 'value',
         columnType: 'FLOAT(10, 2)',

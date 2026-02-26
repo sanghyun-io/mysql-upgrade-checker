@@ -1,6 +1,6 @@
 /**
  * Type Fix Strategies
- * Handles: float_double_precision (FLOAT(M,D) / DOUBLE(M,D) deprecated syntax)
+ * Handles: float_precision (FLOAT(M,D) / DOUBLE(M,D) deprecated syntax)
  */
 
 import type { FixOption } from '../../domain/fix-option';

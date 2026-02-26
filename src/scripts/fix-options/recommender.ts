@@ -65,7 +65,7 @@ function selectRecommendedIndex(issue: Issue, options: FixOption[]): number {
   }
 
   // === Type Fix (FLOAT/DOUBLE precision) ===
-  if (issueId === 'float_double_precision') {
+  if (issueId === 'float_precision') {
     // Recommend keeping FLOAT/DOUBLE (removing precision spec) as the simpler option
     return 0;
   }

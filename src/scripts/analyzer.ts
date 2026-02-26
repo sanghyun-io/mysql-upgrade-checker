@@ -27,6 +27,7 @@ import { FKGraphBuilder } from './analysis/fk-graph';
 import { analyzeCharsetCascade } from './analysis/charset-cascade';
 import { enrichIssuesWithFixOptions } from './fix-options/generator';
 import type { AnalysisContext } from './domain/analysis-context';
+import { escapeIdentifier } from './security/sql-escape';
 
 // Callback types for real-time updates
 export type OnIssueCallback = (issue: Issue) => void;
@@ -1005,7 +1006,7 @@ export class FileAnalyzer {
       code: `CREATE TABLE ${tableName}`,
       mysqlShellCheckId: 'tablesWithFtsPrefix',
       docLink: 'https://dev.mysql.com/doc/refman/8.4/en/innodb-fulltext-index.html',
-      fixQuery: `ALTER TABLE \`${tableName}\` RENAME TO \`${tableName.replace(/^FTS_/i, '')}\`;`
+      fixQuery: `ALTER TABLE ${escapeIdentifier(tableName)} RENAME TO ${escapeIdentifier(tableName.replace(/^FTS_/i, ''))};`
     });
   }
 
@@ -1029,7 +1030,7 @@ export class FileAnalyzer {
         location: fileName,
         tableName: table.name,
         code: `CREATE TABLE ${table.name}`,
-        fixQuery: `ALTER TABLE \`${table.name}\` RENAME TO \`${table.name}_renamed\`;`,
+        fixQuery: `ALTER TABLE ${escapeIdentifier(table.name)} RENAME TO ${escapeIdentifier(table.name + '_renamed')};`,
         mysqlShellCheckId: 'reservedKeywords'
       });
     }
@@ -1050,7 +1051,7 @@ export class FileAnalyzer {
           tableName: table.name,
           columnName: column.name,
           code: `${column.name} ${column.type}`,
-          fixQuery: `ALTER TABLE \`${table.name}\` CHANGE COLUMN \`${column.name}\` \`${column.name}_renamed\` ${column.type};`,
+          fixQuery: `ALTER TABLE ${escapeIdentifier(table.name)} CHANGE COLUMN ${escapeIdentifier(column.name)} ${escapeIdentifier(column.name + '_renamed')} ${column.type};`,
           mysqlShellCheckId: 'reservedKeywords'
         });
       }
@@ -1132,7 +1133,7 @@ export class FileAnalyzer {
         location: fileName,
         tableName: table.name,
         code: `ENGINE=${engine}`,
-        fixQuery: `ALTER TABLE \`${table.name}\` ENGINE=InnoDB;`
+        fixQuery: `ALTER TABLE ${escapeIdentifier(table.name)} ENGINE=InnoDB;`
       });
     }
 
@@ -1147,7 +1148,7 @@ export class FileAnalyzer {
             location: fileName,
             tableName: table.name,
             code: `CHARSET=${table.charset}`,
-            fixQuery: `ALTER TABLE \`${table.name}\` CONVERT TO CHARACTER SET utf8mb4;`
+            fixQuery: `ALTER TABLE ${escapeIdentifier(table.name)} CONVERT TO CHARACTER SET utf8mb4;`
           });
         }
       }
@@ -1176,7 +1177,7 @@ export class FileAnalyzer {
           columnName: column.name,
           columnType: column.type,
           code: `${column.name} ${column.type}`,
-          fixQuery: `ALTER TABLE \`${table.name}\` MODIFY COLUMN \`${column.name}\` YEAR(4);`
+          fixQuery: `ALTER TABLE ${escapeIdentifier(table.name)} MODIFY COLUMN ${escapeIdentifier(column.name)} YEAR(4);`
         });
       }
 
@@ -1190,7 +1191,7 @@ export class FileAnalyzer {
             tableName: table.name,
             columnName: column.name,
             code: `${column.name} DEFAULT '${column.default}'`,
-            fixQuery: `ALTER TABLE \`${table.name}\` MODIFY COLUMN \`${column.name}\` ${column.type} DEFAULT NULL;`
+            fixQuery: `ALTER TABLE ${escapeIdentifier(table.name)} MODIFY COLUMN ${escapeIdentifier(column.name)} ${column.type} DEFAULT NULL;`
           });
         }
       }
@@ -1207,7 +1208,7 @@ export class FileAnalyzer {
               tableName: table.name,
               columnName: column.name,
               code: `${column.name} CHARACTER SET ${column.charset}`,
-              fixQuery: `ALTER TABLE \`${table.name}\` MODIFY COLUMN \`${column.name}\` ${column.type} CHARACTER SET utf8mb4;`
+              fixQuery: `ALTER TABLE ${escapeIdentifier(table.name)} MODIFY COLUMN ${escapeIdentifier(column.name)} ${column.type} CHARACTER SET utf8mb4;`
             });
           }
         }
@@ -1284,7 +1285,7 @@ export class FileAnalyzer {
         code: `ENGINE=${table.engine}, PARTITION BY ${table.partitions[0]?.type || 'UNKNOWN'}`,
         mysqlShellCheckId: 'nonNativePartitioning',
         docLink: 'https://dev.mysql.com/doc/refman/8.4/en/partitioning-limitations.html',
-        fixQuery: `ALTER TABLE \`${table.name}\` ENGINE=InnoDB;`
+        fixQuery: `ALTER TABLE ${escapeIdentifier(table.name)} ENGINE=InnoDB;`
       });
     }
 
@@ -1303,7 +1304,7 @@ export class FileAnalyzer {
         code: `TABLESPACE=${table.tablespace} PARTITION BY ${table.partitions[0]?.type || 'UNKNOWN'}`,
         mysqlShellCheckId: 'partitionedTablesInSharedTablespaces',
         docLink: 'https://dev.mysql.com/doc/refman/8.4/en/partitioning-limitations.html',
-        fixQuery: `ALTER TABLE \`${table.name}\` TABLESPACE = innodb_file_per_table;`
+        fixQuery: `ALTER TABLE ${escapeIdentifier(table.name)} TABLESPACE = innodb_file_per_table;`
       });
     }
 
@@ -1340,7 +1341,7 @@ export class FileAnalyzer {
           code: `PARTITION ${partition.name} TABLESPACE=${partition.tablespace}`,
           mysqlShellCheckId: 'partitionedTablesInSharedTablespaces',
           docLink: 'https://dev.mysql.com/doc/refman/8.4/en/partitioning-limitations.html',
-          fixQuery: `ALTER TABLE \`${table.name}\` REORGANIZE PARTITION \`${partition.name}\` INTO (PARTITION \`${partition.name}\` TABLESPACE = innodb_file_per_table);`
+          fixQuery: `ALTER TABLE ${escapeIdentifier(table.name)} REORGANIZE PARTITION ${escapeIdentifier(partition.name)} INTO (PARTITION ${escapeIdentifier(partition.name)} TABLESPACE = innodb_file_per_table);`
         });
       }
     }
@@ -1650,10 +1651,10 @@ export class FileAnalyzer {
     }
 
     // Date/Time types
+    if (type.includes('DATETIME')) return 8;   // Must come before DATE and TIME
+    if (type.includes('TIMESTAMP')) return 4;  // Must come before TIME
     if (type.includes('DATE')) return 3;
     if (type.includes('TIME')) return 3;
-    if (type.includes('DATETIME')) return 8;
-    if (type.includes('TIMESTAMP')) return 4;
     if (type.includes('YEAR')) return 1;
 
     // Binary/Blob
@@ -1722,12 +1723,12 @@ export class FileAnalyzer {
       // Only add prefix for string columns (large bytes typically mean string)
       if (d.bytes > 100) {
         const suggestedPrefix = Math.floor(d.bytes * ratio / 4); // Assuming utf8mb4
-        return `\`${d.column}\`(${Math.min(suggestedPrefix, 191)})`;
+        return `${escapeIdentifier(d.column)}(${Math.min(suggestedPrefix, 191)})`;
       }
-      return `\`${d.column}\``;
+      return escapeIdentifier(d.column);
     });
 
-    return `ALTER TABLE \`${tableName}\` DROP INDEX \`${indexName}\`, ADD INDEX \`${indexName}\` (${prefixedColumns.join(', ')});`;
+    return `ALTER TABLE ${escapeIdentifier(tableName)} DROP INDEX ${escapeIdentifier(indexName)}, ADD INDEX ${escapeIdentifier(indexName)} (${prefixedColumns.join(', ')});`;
   }
 
   /**
@@ -1750,7 +1751,7 @@ export class FileAnalyzer {
           location: fileName,
           tableName: table.name,
           code: `CONSTRAINT ${fk.name.substring(0, 50)}...`,
-          fixQuery: `ALTER TABLE \`${table.name}\` DROP FOREIGN KEY \`${fk.name}\`, ADD CONSTRAINT \`fk_${table.name.substring(0, 20)}_${fk.columns[0]}\` FOREIGN KEY (${fk.columns.map(c => `\`${c}\``).join(', ')}) REFERENCES \`${fk.refTable}\`(${fk.refColumns.map(c => `\`${c}\``).join(', ')});`,
+          fixQuery: `ALTER TABLE ${escapeIdentifier(table.name)} DROP FOREIGN KEY ${escapeIdentifier(fk.name)}, ADD CONSTRAINT ${escapeIdentifier('fk_' + table.name.substring(0, 20) + '_' + fk.columns[0])} FOREIGN KEY (${fk.columns.map(c => escapeIdentifier(c)).join(', ')}) REFERENCES ${escapeIdentifier(fk.refTable)}(${fk.refColumns.map(c => escapeIdentifier(c)).join(', ')});`,
           mysqlShellCheckId: 'foreignKeyConstraintNames'
         });
       }
@@ -1811,7 +1812,7 @@ export class FileAnalyzer {
           tableName: fkCheck.sourceTable,
           code: fkCheck.code,
           mysqlShellCheckId: 'foreignKeyReferences',
-          fixQuery: `ALTER TABLE \`${fkCheck.refTable}\` ADD UNIQUE INDEX \`idx_${fkCheck.refColumns.join('_')}\` (\`${fkCheck.refColumns.join('`, `')}\`);`
+          fixQuery: `ALTER TABLE ${escapeIdentifier(fkCheck.refTable)} ADD UNIQUE INDEX ${escapeIdentifier('idx_' + fkCheck.refColumns.join('_'))} (${fkCheck.refColumns.map(c => escapeIdentifier(c)).join(', ')});`
         });
       }
       // If hasProperIndex is true, no issue is added - the FK is valid

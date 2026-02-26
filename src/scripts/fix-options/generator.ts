@@ -32,7 +32,7 @@ const STRATEGY_REGISTRY: Array<{
     generate: generateCharsetFixOptions,
   },
   {
-    match: (id) => id === 'float_double_precision',
+    match: (id) => id === 'float_precision',
     generate: generateTypeFixOptions,
   },
   {

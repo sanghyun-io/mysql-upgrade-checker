@@ -121,7 +121,7 @@ export function generateCSVReport(issues: Issue[]): string {
     issue.title,
     issue.description,
     issue.location || '',
-    issue.code ? issue.code.replace(/"/g, '""') : '',
+    issue.code ?? '',
     issue.suggestion,
     issue.mysqlShellCheckId || ''
   ]);
@@ -184,7 +184,7 @@ export function generateFixQueriesSQL(issues: Issue[]): string {
   categoryGroups.forEach((categoryIssues, category) => {
     const categoryLabel = getCategoryLabel(category);
     lines.push('-- ============================================================================');
-    lines.push(`-- ${categoryLabel}`);
+    lines.push(`-- ${sanitizeSQLComment(categoryLabel)}`);
     lines.push('-- ============================================================================');
     lines.push('');
 

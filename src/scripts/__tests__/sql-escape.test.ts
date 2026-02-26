@@ -283,7 +283,7 @@ describe('SQL injection regression tests — strategy files', () => {
   describe('type-fix: malicious table and column names', () => {
     it('does not inject raw table/column names into SQL', () => {
       const issue = makeIssue({
-        id: 'float_double_precision',
+        id: 'float_precision',
         tableName: maliciousTable,
         columnName: maliciousColumn,
         columnType: 'FLOAT(10, 2)',

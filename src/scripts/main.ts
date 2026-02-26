@@ -11,7 +11,7 @@ import {
   generateFixQueriesSQL,
   downloadFile
 } from './report';
-import { sanitizeSQLComment } from './security/sanitizer';
+
 
 let uploadedFiles: File[] = [];
 let analysisResults: AnalysisResults = {
@@ -350,38 +350,6 @@ document.body.appendChild(folderInput);
   folderInput.value = '';
 };
 
-(window as any).exportReport = () => {
-  const report = {
-    ...analysisResults,
-    exportedAt: new Date().toISOString(),
-    version: '1.0.0'
-  };
-
-  downloadJSON(report, `mysql-upgrade-report-${new Date().toISOString().split('T')[0]}.json`);
-};
-
-(window as any).exportAllFixQueries = () => {
-  const queries = analysisResults.issues
-    .filter((issue) => issue.fixQuery)
-    .map((issue) => {
-      return `-- ${sanitizeSQLComment(issue.title)}\n-- 위치: ${sanitizeSQLComment(issue.location ?? '')}\n${issue.fixQuery}\n`;
-    })
-    .join('\n\n');
-
-  if (queries) {
-    const content = [
-      `-- MySQL 8.0 to 8.4 업그레이드 수정 쿼리\n`,
-      `-- 생성일시: ${new Date().toISOString()}\n`,
-      `-- 총 ${analysisResults.issues.filter((i) => i.fixQuery).length}개의 수정 쿼리\n\n`,
-      queries
-    ].join('');
-
-    downloadText(content, `mysql-upgrade-fix-queries-${new Date().toISOString().split('T')[0]}.sql`);
-  } else {
-    showInfo('생성할 수정 쿼리가 없습니다.');
-  }
-};
-
 // Event Listeners
 folderInput.addEventListener('change', (e) => {
   const target = e.target as HTMLInputElement;
@@ -458,12 +426,6 @@ function detectFileType(fileName: string): string {
   return 'unknown';
 }
 
-function downloadJSON(data: any, filename: string): void {
-  const blob = new Blob([JSON.stringify(data, null, 2)], {
-    type: 'application/json;charset=utf-8'
-  });
-  downloadBlob(blob, filename);
-}
 
 function downloadText(content: string, filename: string): void {
   const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });

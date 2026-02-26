@@ -9,7 +9,8 @@ import { escapeIdentifier } from '../../security/sql-escape';
 
 export function generateEngineFixOptions(issue: Issue): FixOption[] {
   const table = issue.tableName ?? 'unknown';
-  const currentEngine = issue.matchedText ?? 'MyISAM';
+  const engineMatch = (issue.matchedText ?? '').match(/ENGINE\s*=\s*(\w+)/i);
+  const currentEngine = engineMatch ? engineMatch[1] : 'MyISAM';
   const escapedTable = escapeIdentifier(table);
 
   const options: FixOption[] = [];

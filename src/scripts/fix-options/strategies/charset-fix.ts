@@ -34,29 +34,30 @@ export function generateCharsetFixOptions(issue: Issue): FixOption[] {
       rollbackTemplate: `ALTER TABLE ${escapedTable} CONVERT TO CHARACTER SET utf8mb3;`,
     });
   } else {
+    // FK-related tables (deduplicated, excluding self)
+    const uniqueRelated = [...new Set(relatedTables.filter(t => t.toLowerCase() !== table.toLowerCase()))];
+
     // FK cascade mode: convert all related tables (FK checks managed by plan generator)
-    const uniqueRelatedCascade = [...new Set(relatedTables.filter(t => t.toLowerCase() !== table.toLowerCase()))];
     const fkCascadeSQL = [
       `-- FK 체크는 Migration Plan에서 일괄 관리됩니다.`,
-      ...uniqueRelatedCascade.map(t => `ALTER TABLE ${escapeIdentifier(t)} CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;`),
+      ...uniqueRelated.map(t => `ALTER TABLE ${escapeIdentifier(t)} CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;`),
       `ALTER TABLE ${escapedTable} CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;`,
     ].join('\n');
 
     options.push({
       strategy: 'collation_fk_cascade',
       label: 'FK 관련 테이블 일괄 변환',
-      description: `FK 체크를 비활성화하고 관련 테이블(${uniqueRelatedCascade.length}개)을 모두 utf8mb4로 변환합니다.`,
+      description: `FK 체크를 비활성화하고 관련 테이블(${uniqueRelated.length}개)을 모두 utf8mb4로 변환합니다.`,
       sqlTemplate: fkCascadeSQL,
       isRecommended: false,
       effort: 'medium',
       risk: 'medium',
-      impact: `${uniqueRelatedCascade.length}개 관련 테이블 영향. 대용량 테이블의 경우 시간 소요.`,
+      impact: `${uniqueRelated.length}개 관련 테이블 영향. 대용량 테이블의 경우 시간 소요.`,
       reversibility: 'partially_reversible',
       rollbackTemplate: null,
     });
 
     // FK safe mode: use Migration Plan for correct topological ordering
-    const uniqueRelated = [...new Set(relatedTables.filter(t => t.toLowerCase() !== table.toLowerCase()))];
     options.push({
       strategy: 'collation_fk_safe',
       label: 'FK 안전 순서로 변환',
