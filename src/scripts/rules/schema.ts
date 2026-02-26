@@ -170,14 +170,22 @@ export const invalidObjectsRules: CompatibilityRule[] = [
     id: 'deprecated_function_84',
     type: 'query',
     category: 'invalidObjects',
-    pattern: new RegExp(`\\b(${DEPRECATED_FUNCTIONS_84.join('|')})\\s*\\(`, 'gi'),
+    pattern: new RegExp(`\\b(${DEPRECATED_FUNCTIONS_84.join('|')})\\b`, 'gi'),
     severity: 'warning',
     title: 'Deprecated 함수 사용',
     description: `다음 함수는 MySQL 8.4에서 deprecated되었습니다: ${DEPRECATED_FUNCTIONS_84.join(', ')}`,
-    suggestion: 'FOUND_ROWS() 대신 COUNT 쿼리를 별도로 실행하세요.',
+    suggestion: 'FOUND_ROWS() → COUNT(*) 쿼리로 대체, MASTER_POS_WAIT() → SOURCE_POS_WAIT()로 대체하세요.',
     mysqlShellCheckId: 'removedFunctions',
     docLink: 'https://dev.mysql.com/doc/refman/8.4/en/information-functions.html',
-    generateFixQuery: () => {
+    generateFixQuery: (context) => {
+      const code = context.code ?? '';
+      if (/\bMASTER_POS_WAIT\b/i.test(code)) {
+        return [
+          `-- MASTER_POS_WAIT()는 MySQL 8.4에서 deprecated되었습니다.`,
+          `-- SOURCE_POS_WAIT()로 교체하세요:`,
+          `-- SELECT SOURCE_POS_WAIT(log_name, log_pos, timeout);`
+        ].join('\n');
+      }
       return [
         `-- SQL_CALC_FOUND_ROWS와 FOUND_ROWS() 대신:`,
         `-- 1. 데이터 조회 쿼리`,
