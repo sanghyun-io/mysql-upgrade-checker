@@ -72,7 +72,7 @@ export const SYS_VARS_NEW_DEFAULTS_84 = {
   'innodb_log_buffer_size': [16777216, 67108864, '로그 버퍼 크기'],
   'innodb_redo_log_capacity': [104857600, 419430400, 'Redo 로그 용량'],
   'innodb_change_buffering': ['all', 'none', 'Change Buffering'],
-  'binlog_transaction_dependency_tracking': ['COMMIT_ORDER', 'WRITESET', '트랜잭션 의존성 추적']
+  'group_replication_consistency': ['EVENTUAL', 'BEFORE_ON_PRIMARY_FAILOVER', 'Group Replication 트랜잭션 일관성']
 } as const;
 
 // ============================================================================
@@ -394,7 +394,7 @@ WHERE VARIABLE_NAME IN (
   'innodb_log_buffer_size',
   'innodb_redo_log_capacity',
   'innodb_change_buffering',
-  'binlog_transaction_dependency_tracking'
+  'group_replication_consistency'
 );`;
 
 // ============================================================================
