@@ -30,15 +30,327 @@ body {
     background-color: #020202;
     background-image: url('https://www.transparenttextures.com/patterns/dark-matter.png');
     background-attachment: fixed;
-    color: var(--text-primary);
+    color: #94a3b8;
     min-height: 100vh;
     line-height: 1.6;
+    overflow-x: hidden;
 }
 
 .container {
     max-width: 1400px;
     margin: 0 auto;
     padding: 40px 20px;
+    display: none;
+}
+
+/* ============================================================================
+   New App Layout — Top Header + Right Sidebar + Main Content
+   ============================================================================ */
+
+.app-layout {
+    display: flex;
+    flex-direction: row;
+    width: 100%;
+    min-height: 100vh;
+    padding-top: 32px;
+}
+
+.app-main {
+    flex: 1;
+    min-width: 0;
+    padding: 24px;
+    padding-right: calc(256px + 24px);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+/* ============================================================================
+   Top Header Bar
+   ============================================================================ */
+
+.top-header {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    height: 32px;
+    background: rgba(10, 10, 12, 0.95);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    z-index: 50;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 16px;
+    backdrop-filter: blur(12px);
+    box-shadow: 0 2px 20px rgba(0,0,0,0.5);
+}
+
+.top-header__left {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    height: 100%;
+}
+
+.top-header__brand {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border-right: 1px solid rgba(255,255,255,0.08);
+    padding-right: 16px;
+    height: 100%;
+}
+
+.top-header__brand-dot {
+    width: 6px; height: 6px;
+    border-radius: 2px;
+    background: #00f0ff;
+    animation: pulse 2s infinite;
+    box-shadow: 0 0 8px rgba(0, 240, 255, 0.8);
+}
+
+.top-header__brand-text {
+    font-size: 10px;
+    font-family: 'Rajdhani', sans-serif;
+    letter-spacing: 0.2em;
+    color: rgba(0, 240, 255, 0.8);
+    text-transform: uppercase;
+    font-weight: 700;
+}
+
+.top-header__stats {
+    display: flex;
+    gap: 16px;
+    font-size: 9px;
+    font-family: 'JetBrains Mono', monospace;
+    color: #6b7280;
+}
+
+.top-header__stat-value {
+    color: #d1d5db;
+}
+
+.top-header__stat-online {
+    color: rgba(0, 240, 255, 0.6);
+}
+
+.top-header__right {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+.top-header__channel-bar {
+    height: 4px;
+    width: 96px;
+    background: linear-gradient(to right, transparent, rgba(0, 240, 255, 0.2), transparent);
+}
+
+.top-header__channel-text {
+    font-size: 9px;
+    font-family: 'JetBrains Mono', monospace;
+    color: #374151;
+    letter-spacing: 0.1em;
+}
+
+/* ============================================================================
+   Right Sidebar — Control Rack
+   ============================================================================ */
+
+.control-rack {
+    position: fixed;
+    top: 32px; right: 0; bottom: 0;
+    width: 256px;
+    background: #050505;
+    border-left: 1px solid rgba(255,255,255,0.05);
+    z-index: 20;
+    display: flex;
+    flex-direction: column;
+    box-shadow: -4px 0 30px rgba(0,0,0,0.5);
+}
+
+.control-rack__bg {
+    position: absolute;
+    inset: 0;
+    opacity: 0.2;
+    pointer-events: none;
+}
+
+.control-rack__header {
+    height: 48px;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+    display: flex;
+    align-items: center;
+    padding: 0 16px;
+    background: #08080a;
+    flex-shrink: 0;
+}
+
+.control-rack__title {
+    font-size: 10px;
+    font-family: 'JetBrains Mono', monospace;
+    color: #6b7280;
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+}
+
+.control-rack__body {
+    flex: 1;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    overflow-y: auto;
+}
+
+.control-rack__footer {
+    height: 32px;
+    border-top: 1px solid rgba(255,255,255,0.05);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 16px;
+    background: #08080a;
+    flex-shrink: 0;
+}
+
+.control-rack__footer-text {
+    font-size: 8px;
+    font-family: 'JetBrains Mono', monospace;
+    color: #374151;
+    text-transform: uppercase;
+}
+
+/* Rack panels */
+.rack-panel {
+    background: #0a0a0c;
+    border: 1px solid #1f2937;
+    padding: 12px;
+    position: relative;
+}
+
+.rack-panel__indicator {
+    position: absolute;
+    top: 4px; right: 4px;
+    width: 6px; height: 6px;
+    background: #14532d;
+    border-radius: 50%;
+    transition: background 0.3s;
+}
+
+.rack-panel:hover .rack-panel__indicator {
+    background: #22c55e;
+}
+
+.rack-panel__title {
+    font-size: 10px;
+    font-family: 'Rajdhani', sans-serif;
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    color: #9ca3af;
+    margin-bottom: 8px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid #1f2937;
+}
+
+.rack-panel__row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 9px;
+    font-family: 'JetBrains Mono', monospace;
+    color: #6b7280;
+    margin-bottom: 4px;
+}
+
+.rack-panel__value--green { color: #22c55e; }
+.rack-panel__value--gray { color: #d1d5db; }
+
+.rack-panel__bar {
+    width: 100%;
+    background: #111827;
+    height: 4px;
+    margin-top: 8px;
+    overflow: hidden;
+}
+
+.rack-panel__bar-fill {
+    height: 100%;
+    background: rgba(0, 240, 255, 0.5);
+    width: 66%;
+    animation: pulse 2s infinite;
+}
+
+.rack-link-list {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.rack-link {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 10px;
+    font-family: 'JetBrains Mono', monospace;
+    color: #6b7280;
+    padding: 4px;
+    text-decoration: none;
+    transition: color 0.2s, background 0.2s;
+}
+
+.rack-link:hover {
+    color: #00f0ff;
+    background: rgba(255,255,255,0.03);
+}
+
+.rack-link__icon {
+    font-family: 'Material Symbols Outlined';
+    font-size: 10px;
+    opacity: 0;
+    transition: opacity 0.2s;
+}
+
+.rack-link:hover .rack-link__icon {
+    opacity: 1;
+}
+
+.rack-credits__copy {
+    font-size: 9px;
+    font-family: 'JetBrains Mono', monospace;
+    color: #374151;
+    margin-bottom: 8px;
+}
+
+.rack-credits__link {
+    display: block;
+    font-size: 10px;
+    color: rgba(0, 240, 255, 0.7);
+    font-family: 'JetBrains Mono', monospace;
+    text-align: center;
+    border: 1px solid rgba(0, 240, 255, 0.2);
+    background: rgba(0, 240, 255, 0.05);
+    padding: 4px;
+    text-decoration: none;
+    transition: color 0.2s, background 0.2s;
+}
+
+.rack-credits__link:hover {
+    color: #00f0ff;
+    background: rgba(0, 240, 255, 0.1);
+}
+
+/* ============================================================================
+   Ambient Glow Overlay
+   ============================================================================ */
+
+.ambient-glow {
+    position: fixed;
+    top: 0; left: 50%;
+    transform: translateX(-50%);
+    width: 600px; height: 300px;
+    background: radial-gradient(ellipse, rgba(0, 240, 255, 0.03) 0%, transparent 70%);
+    pointer-events: none;
+    z-index: 1;
 }
 
 /* ============================================================================
@@ -282,13 +594,16 @@ body {
 .tab-navigation {
     background: #111115;
     border: 1px solid #2a2a35;
-    padding: 6px;
+    padding: 4px;
     display: flex;
-    gap: 6px;
+    gap: 4px;
     margin-bottom: 24px;
     box-shadow: inset 1px 1px 0 rgba(255, 255, 255, 0.05), inset -1px -1px 0 rgba(0, 0, 0, 0.5), 4px 4px 12px rgba(0, 0, 0, 0.6);
     border-radius: 2px;
     position: relative;
+    height: 48px;
+    max-width: 672px;
+    width: 100%;
 }
 
 .tab-btn {
@@ -314,22 +629,16 @@ body {
 }
 
 .tab-btn.active {
-    background: #1c1c22;
+    background: rgba(255, 255, 255, 0.04);
     color: white;
     border-color: rgba(0, 240, 255, 0.3);
     box-shadow: inset 0 0 16px rgba(0, 240, 255, 0.08);
     text-shadow: 0 0 8px rgba(0, 240, 255, 0.4);
+    border-bottom: 2px solid #00f0ff;
 }
 
 .tab-btn.active::before {
-    content: '';
-    position: absolute;
-    left: 0;
-    top: 0;
-    bottom: 0;
-    width: 4px;
-    background: #00f0ff;
-    box-shadow: 0 0 15px rgba(0, 240, 255, 0.6);
+    display: none;
 }
 
 .tab-code {
@@ -3300,4 +3609,23 @@ body {
     color: rgba(0, 240, 255, 0.6);
     text-transform: uppercase;
     font-weight: 700;
+}
+
+/* ENGAGE SELECTOR inline button bottom-line hover effect */
+button:hover .btn-bottom-line {
+    right: 0 !important;
+}
+
+/* App main sections — constrain width */
+.action-section,
+.progress-section,
+.results-section {
+    width: 100%;
+    max-width: 672px;
+}
+
+/* Tab content width */
+.tab-content {
+    width: 100%;
+    max-width: 672px;
 }
