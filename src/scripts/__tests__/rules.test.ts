@@ -8,6 +8,7 @@ import { compatibilityRules, rulesByCategory } from '../rules';
 import {
   REMOVED_SYS_VARS_84,
   SYS_VARS_NEW_DEFAULTS_84,
+  SYSVAR_CHECK_QUERY,
   NEW_RESERVED_KEYWORDS_84,
   REMOVED_FUNCTIONS_84
 } from '../constants';
@@ -1015,5 +1016,31 @@ describe('Constants Validation', () => {
     expect(REMOVED_FUNCTIONS_84.length).toBeGreaterThan(0);
     expect(REMOVED_FUNCTIONS_84).toContain('PASSWORD');
     expect(REMOVED_FUNCTIONS_84).toContain('ENCRYPT');
+  });
+});
+
+// ============================================================================
+// CONTRACT TESTS: SYS_VARS_NEW_DEFAULTS_84 and SYSVAR_CHECK_QUERY
+// ============================================================================
+
+describe('SYS_VARS_NEW_DEFAULTS_84 contract tests', () => {
+  it('should contain group_replication_consistency with correct values', () => {
+    const entry = SYS_VARS_NEW_DEFAULTS_84['group_replication_consistency'];
+    expect(entry).toBeDefined();
+    expect(entry[0]).toBe('EVENTUAL');
+    expect(entry[1]).toBe('BEFORE_ON_PRIMARY_FAILOVER');
+    expect(entry[2]).toBe('Group Replication 트랜잭션 일관성');
+  });
+
+  it('should NOT contain binlog_transaction_dependency_tracking (regression guard)', () => {
+    const keys = Object.keys(SYS_VARS_NEW_DEFAULTS_84);
+    expect(keys).not.toContain('binlog_transaction_dependency_tracking');
+  });
+
+  it('SYSVAR_CHECK_QUERY should contain all keys from SYS_VARS_NEW_DEFAULTS_84', () => {
+    const keys = Object.keys(SYS_VARS_NEW_DEFAULTS_84);
+    for (const key of keys) {
+      expect(SYSVAR_CHECK_QUERY).toContain(`'${key}'`);
+    }
   });
 });
