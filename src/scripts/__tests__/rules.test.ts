@@ -650,6 +650,14 @@ describe('Invalid Objects Rules', () => {
       expect(testPatternMatch('deprecated_function_84', 'SELECT SQL_CALC_FOUND_ROWS() FROM users')).toBe(true);
     });
 
+    it('should detect MASTER_POS_WAIT with arguments', () => {
+      expect(testPatternMatch('deprecated_function_84', 'SELECT MASTER_POS_WAIT(log_name, pos)')).toBe(true);
+    });
+
+    it('should detect bare MASTER_POS_WAIT without parenthesis', () => {
+      expect(testPatternMatch('deprecated_function_84', 'MASTER_POS_WAIT')).toBe(true);
+    });
+
     it('should have warning severity', () => {
       const rule = compatibilityRules.find(r => r.id === 'deprecated_function_84');
       expect(rule?.severity).toBe('warning');
@@ -660,11 +668,17 @@ describe('Invalid Objects Rules', () => {
       expect(rule?.category).toBe('invalidObjects');
     });
 
-    it('should generate fix query with alternative approach', () => {
+    it('should generate fix query with FOUND_ROWS alternative (COUNT)', () => {
       const rule = compatibilityRules.find(r => r.id === 'deprecated_function_84');
-      const fix = rule?.generateFixQuery?.({});
+      const fix = rule?.generateFixQuery?.({ code: 'SELECT FOUND_ROWS()' });
       expect(fix).toContain('SQL_CALC_FOUND_ROWS');
       expect(fix).toContain('COUNT(*)');
+    });
+
+    it('should generate fix query mentioning SOURCE_POS_WAIT for MASTER_POS_WAIT', () => {
+      const rule = compatibilityRules.find(r => r.id === 'deprecated_function_84');
+      const fix = rule?.generateFixQuery?.({ code: 'SELECT MASTER_POS_WAIT(log_name, pos)' });
+      expect(fix).toContain('SOURCE_POS_WAIT');
     });
   });
 
