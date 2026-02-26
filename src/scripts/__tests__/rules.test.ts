@@ -69,24 +69,14 @@ describe('Removed System Variables Rules', () => {
     expect(testPatternMatch('removed_sys_var', 'max_connections=100')).toBe(false);
   });
 
-  it('should detect all removed system variables', () => {
-    // Test a sample of removed variables
-    const sampleVars = [
-      'avoid_temporal_upgrade',
-      'binlog_transaction_dependency_tracking',
-      'expire_logs_days',
-      'innodb_log_file_size',
-      'innodb_log_files_in_group',
-      'keyring_file_data',
-      'language',
-      'log_bin_use_v1_row_events',
-      'old',
-      'new',
-      'show_old_temporals'
-    ];
-
-    for (const varName of sampleVars) {
-      expect(testPatternMatch('removed_sys_var', `${varName}=value`)).toBe(true);
+  it('should detect all removed system variables (exhaustive)', () => {
+    // Iterate ALL entries in REMOVED_SYS_VARS_84 so that any typo or accidental
+    // deletion of an entry causes this test to fail immediately.
+    for (const varName of REMOVED_SYS_VARS_84) {
+      expect(
+        testPatternMatch('removed_sys_var', `${varName}=value`),
+        `Expected removed_sys_var rule to detect: ${varName}`
+      ).toBe(true);
     }
   });
 
