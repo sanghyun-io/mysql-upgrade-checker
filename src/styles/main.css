@@ -12,7 +12,7 @@
     --success: #00a86b;
     --warning: #ffaa00;
     --error: #dc143c;
-    --bg-dark: #050505;
+    --bg-dark: #020202;
     --bg-card: #111115;
     --bg-elevated: #1c1c22;
     --text-primary: #e2e8f0;
@@ -27,7 +27,7 @@
 
 body {
     font-family: 'Noto Sans KR', sans-serif;
-    background-color: #050505;
+    background-color: #020202;
     background-image: url('https://www.transparenttextures.com/patterns/dark-matter.png');
     background-attachment: fixed;
     color: var(--text-primary);
@@ -327,9 +327,9 @@ body {
     left: 0;
     top: 0;
     bottom: 0;
-    width: 3px;
+    width: 4px;
     background: #00f0ff;
-    box-shadow: 0 0 8px rgba(0, 240, 255, 0.8);
+    box-shadow: 0 0 15px rgba(0, 240, 255, 0.6);
 }
 
 .tab-code {
@@ -2739,4 +2739,565 @@ body {
 
 ::-webkit-scrollbar-thumb:hover {
     background: #00f0ff;
+}
+
+/* ============================================================================
+   Stitch Design Upgrades — Dark Hangar Mecha V2
+   ============================================================================ */
+
+/* Rivet/dot pattern background */
+.rivet-bg {
+    background-color: #08080a;
+    background-image: radial-gradient(#1f2937 1px, transparent 1px), radial-gradient(#1f2937 1px, transparent 1px);
+    background-size: 20px 20px;
+    background-position: 0 0, 10px 10px;
+}
+
+/* Scanlines overlay */
+.scanlines {
+    background: linear-gradient(
+        to bottom,
+        rgba(255,255,255,0),
+        rgba(255,255,255,0) 50%,
+        rgba(0,0,0,0.2) 50%,
+        rgba(0,0,0,0.2)
+    );
+    background-size: 100% 4px;
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    pointer-events: none;
+    z-index: 15;
+    opacity: 0.3;
+}
+
+/* Metal grate texture overlay */
+.metal-grate-overlay {
+    position: absolute;
+    inset: 0;
+    background-image: repeating-linear-gradient(45deg, #18181b 0, #18181b 1px, transparent 0, transparent 50%);
+    background-size: 4px 4px;
+    opacity: 0.2;
+    pointer-events: none;
+    mix-blend-mode: multiply;
+}
+
+/* Radial vignette overlay */
+.vignette-overlay {
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(circle at center, transparent 0%, rgba(0,0,0,0.95) 90%);
+    pointer-events: none;
+}
+
+/* Side vignette panels (fixed) */
+.side-vignette-left {
+    position: fixed;
+    top: 0; left: 0;
+    width: 192px; height: 100vh;
+    border-right: 1px solid rgba(255,255,255,0.05);
+    background: linear-gradient(to right, black, rgba(0,0,0,0.8), transparent);
+    pointer-events: none;
+    z-index: 0;
+}
+.side-vignette-right {
+    position: fixed;
+    top: 0; right: 0;
+    width: 192px; height: 100vh;
+    border-left: 1px solid rgba(255,255,255,0.05);
+    background: linear-gradient(to left, black, rgba(0,0,0,0.8), transparent);
+    pointer-events: none;
+    z-index: 0;
+}
+
+/* Upload section side rails */
+.upload-side-rail {
+    position: absolute;
+    top: 0; bottom: 0;
+    width: 12px;
+    background: #08080a;
+    z-index: 20;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 32px;
+    padding: 40px 0;
+}
+.upload-side-rail--left {
+    left: 0;
+    border-right: 1px solid #222;
+}
+.upload-side-rail--right {
+    right: 0;
+    border-left: 1px solid #222;
+}
+.upload-side-rail__indicator {
+    width: 4px;
+    height: 32px;
+    background: #374151;
+    margin: 0 auto;
+    border-radius: 9999px;
+}
+
+/* Upload section corner bolts (large version) */
+.bolt-lg {
+    width: 24px;
+    height: 24px;
+    background: #1f2937;
+    border-radius: 50%;
+    box-shadow: inset 1px 1px 1px rgba(255,255,255,0.1), inset -1px -1px 1px rgba(0,0,0,0.9), 1px 1px 2px rgba(0,0,0,0.8);
+    position: absolute;
+    z-index: 20;
+    border: 1px solid #374151;
+}
+.bolt-lg-tl { top: 12px; left: 12px; }
+.bolt-lg-tr { top: 12px; right: 12px; }
+.bolt-lg-bl { bottom: 12px; left: 12px; }
+.bolt-lg-br { bottom: 12px; right: 12px; }
+
+/* Upload panel diagnostic labels */
+.upload-panel-status {
+    position: absolute;
+    top: 32px; left: 32px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: rgba(0, 240, 255, 0.3);
+    letter-spacing: 0.1em;
+    border-left: 1px solid rgba(0, 240, 255, 0.2);
+    padding-left: 12px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+}
+.upload-panel-status__unit {
+    font-size: 9px;
+    margin-bottom: 4px;
+    opacity: 0.7;
+}
+.upload-panel-status__state {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.upload-panel-status__dot {
+    width: 6px; height: 6px;
+    background: rgba(0, 240, 255, 0.5);
+    border-radius: 50%;
+    animation: pulse 2s infinite;
+}
+
+.upload-panel-temp {
+    position: absolute;
+    bottom: 32px; right: 32px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: rgba(255, 170, 0, 0.3);
+    letter-spacing: 0.1em;
+    border-right: 1px solid rgba(255, 170, 0, 0.2);
+    padding-right: 12px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+    text-align: right;
+}
+.upload-panel-temp__bars {
+    display: flex;
+    align-items: flex-end;
+    justify-content: flex-end;
+    gap: 2px;
+    margin-bottom: 4px;
+}
+.upload-panel-temp__bar {
+    width: 4px;
+    background: rgba(255, 170, 0, 0.3);
+}
+.upload-panel-temp__power {
+    font-size: 9px;
+    opacity: 0.7;
+}
+
+/* Spinning rings around upload icon */
+.spin-ring-container {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 128px;
+    height: 128px;
+    margin: 0 auto 40px;
+    cursor: pointer;
+    transition: transform 0.5s ease;
+}
+.spin-ring-container:hover {
+    transform: scale(1.05);
+}
+.spin-ring {
+    position: absolute;
+    border-radius: 50%;
+    border: 1px solid transparent;
+}
+.spin-ring--dashed {
+    inset: -64px;
+    border: 1px dashed rgba(255,255,255,0.05);
+    animation: spin-slow 30s linear infinite;
+}
+.spin-ring--cyan {
+    inset: -40px;
+    border-top-color: rgba(0, 240, 255, 0.2);
+    border-bottom-color: rgba(0, 240, 255, 0.2);
+    animation: spin-slow 10s linear infinite;
+}
+.spin-ring--amber {
+    inset: -16px;
+    border-left-color: rgba(255, 170, 0, 0.2);
+    border-right-color: rgba(255, 170, 0, 0.2);
+    animation: spin-slow 5s linear infinite reverse;
+}
+.spin-ring-glow {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 240, 255, 0.05);
+    filter: blur(20px);
+    border-radius: 50%;
+    animation: pulse 2s infinite;
+}
+.spin-ring-core {
+    position: relative;
+    width: 128px; height: 128px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: black;
+    border-radius: 50%;
+    box-shadow: inset 0 0 30px rgba(0,0,0,1);
+    border: 4px solid #374151;
+    animation: core-pulse 4s ease-in-out infinite;
+    z-index: 10;
+    overflow: hidden;
+}
+.spin-ring-core__icon {
+    font-family: 'Material Symbols Outlined';
+    font-size: 48px;
+    color: #00f0ff;
+    filter: drop-shadow(0 0 10px rgba(0, 240, 255, 0.8));
+    position: relative;
+    z-index: 10;
+    user-select: none;
+}
+.spin-ring-core__bar-container {
+    position: absolute;
+    bottom: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 64px;
+    height: 4px;
+    background: #374151;
+    border-radius: 9999px;
+    overflow: hidden;
+}
+.spin-ring-core__bar {
+    height: 100%;
+    width: 33%;
+    background: #ffaa00;
+    animation: slide-bar 1s linear infinite;
+}
+
+@keyframes core-pulse {
+    0%, 100% { box-shadow: 0 0 20px rgba(0, 240, 255, 0.2), inset 0 0 30px rgba(0, 240, 255, 0.1); }
+    50% { box-shadow: 0 0 50px rgba(0, 240, 255, 0.5), inset 0 0 50px rgba(0, 240, 255, 0.3); }
+}
+
+@keyframes slide-bar {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(300%); }
+}
+
+/* Initialize card */
+.init-card {
+    background: rgba(0,0,0,0.4);
+    border: 1px solid rgba(255,255,255,0.05);
+    padding: 24px;
+    width: 100%;
+    max-width: 448px;
+    position: relative;
+    backdrop-filter: blur(4px);
+    margin: 0 auto;
+}
+.init-card__corner {
+    position: absolute;
+    width: 8px; height: 8px;
+}
+.init-card__corner--tl { top: 0; left: 0; border-top: 1px solid #00f0ff; border-left: 1px solid #00f0ff; }
+.init-card__corner--tr { top: 0; right: 0; border-top: 1px solid #00f0ff; border-right: 1px solid #00f0ff; }
+.init-card__corner--bl { bottom: 0; left: 0; border-bottom: 1px solid #00f0ff; border-left: 1px solid #00f0ff; }
+.init-card__corner--br { bottom: 0; right: 0; border-bottom: 1px solid #00f0ff; border-right: 1px solid #00f0ff; }
+.init-card__title {
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 28px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    text-transform: uppercase;
+    text-shadow: 0 0 10px rgba(0, 240, 255, 0.5);
+    color: white;
+    margin-bottom: 12px;
+}
+.init-card__target {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+.init-card__target-label {
+    font-size: 10px;
+    color: #6b7280;
+    font-family: 'JetBrains Mono', monospace;
+    text-transform: uppercase;
+}
+.init-card__target-value {
+    color: #00f0ff;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    letter-spacing: 0.1em;
+    background: rgba(0, 240, 255, 0.1);
+    padding: 2px 8px;
+}
+.init-card__desc {
+    color: #6b7280;
+    font-size: 12px;
+    font-family: 'JetBrains Mono', monospace;
+    border-top: 1px solid #1f2937;
+    padding-top: 12px;
+    margin-top: 12px;
+    text-align: left;
+}
+.init-card__desc-arrow {
+    color: #ffaa00;
+    margin-right: 4px;
+}
+
+/* ENGAGE SELECTOR button (skewed) */
+.btn-engage-wrapper {
+    margin-top: 40px;
+    position: relative;
+    display: inline-block;
+}
+.btn-engage-bg {
+    position: absolute;
+    inset: -12px;
+    background: #1f2937;
+    border: 1px solid #374151;
+    border-radius: 8px;
+    transform: skewX(-5deg);
+    box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+}
+.btn-engage {
+    position: relative;
+    width: 256px; height: 64px;
+    background: #111111;
+    border: 1px solid #374151;
+    transform: skewX(-5deg);
+    cursor: pointer;
+    overflow: hidden;
+    transition: transform 0.1s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-family: 'Rajdhani', sans-serif;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    font-size: 14px;
+    font-weight: 700;
+}
+.btn-engage:hover {
+    transform: skewX(-5deg) translateY(2px);
+}
+.btn-engage:active {
+    transform: skewX(-5deg) translateY(4px);
+}
+.btn-engage::after {
+    content: '';
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    height: 4px;
+    background: #00f0ff;
+    box-shadow: 0 0 10px rgba(0, 240, 255, 0.8);
+}
+.btn-engage__inset {
+    position: absolute;
+    inset: 0;
+    box-shadow: inset 0 4px 10px rgba(0,0,0,1);
+}
+.btn-engage__gradient {
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 50%;
+    background: linear-gradient(to bottom, rgba(255,255,255,0.2), transparent);
+    pointer-events: none;
+}
+.btn-engage__inner {
+    transform: skewX(5deg);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    position: relative;
+    z-index: 10;
+}
+.btn-engage__icon {
+    font-family: 'Material Symbols Outlined';
+    font-size: 24px;
+    color: #00f0ff;
+    transition: transform 0.5s ease;
+}
+.btn-engage:hover .btn-engage__icon {
+    transform: rotate(90deg);
+}
+.btn-engage__text-block {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+}
+.btn-engage__label {
+    font-size: 14px;
+    letter-spacing: 0.2em;
+    transition: color 0.2s;
+}
+.btn-engage:hover .btn-engage__label {
+    color: #00f0ff;
+}
+.btn-engage__sub {
+    font-size: 9px;
+    color: #6b7280;
+    font-family: 'JetBrains Mono', monospace;
+    letter-spacing: 0.05em;
+    text-transform: lowercase;
+    font-weight: 400;
+}
+.btn-engage-hazard {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%) skewX(-5deg);
+    width: 8px; height: 32px;
+    background: rgba(202, 138, 4, 0.2);
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding: 4px 0;
+}
+.btn-engage-hazard--left { left: -20px; }
+.btn-engage-hazard--right { right: -20px; }
+.btn-engage-hazard__line {
+    width: 100%; height: 1px;
+    background: #eab308;
+}
+
+/* Upload status panel at bottom of upload area */
+.upload-status-panel {
+    height: 24px;
+    background: #050505;
+    border-top: 1px solid #1f2937;
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 16px;
+    z-index: 20;
+}
+.upload-status-panel::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: repeating-linear-gradient(90deg, transparent, transparent 2px, #000 2px, #000 4px);
+    opacity: 0.3;
+    z-index: 10;
+}
+.upload-status-panel__scan {
+    position: absolute;
+    bottom: 0; left: 0;
+    height: 4px;
+    width: 33%;
+    background: #ffaa00;
+    box-shadow: 0 0 10px rgba(255, 170, 0, 0.8);
+    animation: slide-scan 3s linear infinite;
+    opacity: 0.7;
+}
+@keyframes slide-scan {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(400%); }
+}
+.upload-status-panel__left {
+    display: flex;
+    gap: 16px;
+    font-size: 9px;
+    font-family: 'JetBrains Mono', monospace;
+    color: #6b7280;
+    text-transform: uppercase;
+    position: relative;
+    z-index: 20;
+}
+.upload-status-panel__right {
+    font-size: 9px;
+    font-family: 'JetBrains Mono', monospace;
+    color: #6b7280;
+    text-transform: uppercase;
+    position: relative;
+    z-index: 20;
+}
+.upload-status-panel__indicator {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+.upload-status-panel__dot-green {
+    width: 4px; height: 4px;
+    background: #22c55e;
+    border-radius: 50%;
+}
+
+/* System status bar upgrade (skewed pill) */
+.system-status-skewed {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 48px;
+    position: relative;
+}
+.system-status-skewed__line {
+    position: absolute;
+    left: 0; right: 0;
+    top: 50%;
+    height: 1px;
+    background: linear-gradient(to right, transparent, rgba(0, 240, 255, 0.1), transparent);
+}
+.system-status-skewed__pill {
+    background: rgba(0,0,0,0.9);
+    padding: 8px 32px;
+    border: 1px solid rgba(255,255,255,0.1);
+    box-shadow: 0 0 20px rgba(0,0,0,1);
+    backdrop-filter: blur(12px);
+    transform: skewX(-10deg);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    position: relative;
+    z-index: 10;
+}
+.system-status-skewed__inner {
+    transform: skewX(10deg);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+.system-status-skewed__diamond {
+    width: 6px; height: 6px;
+    background: #00f0ff;
+    transform: rotate(45deg);
+    animation: pulse 2s infinite;
+    box-shadow: 0 0 8px rgba(0, 240, 255, 0.8);
+}
+.system-status-skewed__text {
+    font-size: 10px;
+    font-family: 'Rajdhani', sans-serif;
+    letter-spacing: 0.3em;
+    color: rgba(0, 240, 255, 0.6);
+    text-transform: uppercase;
+    font-weight: 700;
 }

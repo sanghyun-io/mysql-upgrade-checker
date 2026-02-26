@@ -9,19 +9,43 @@
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap">
 </head>
 <body>
+    <div class="rivet-bg" style="position:fixed;inset:0;z-index:0;opacity:0.3;pointer-events:none;"></div>
+    <div class="side-vignette-left"></div>
+    <div class="side-vignette-right"></div>
     <div class="welding-spark animate-spark-1" style="top: 25%; left: 2.5%;"></div>
     <div class="welding-spark animate-spark-2" style="bottom: 33%; right: 2.5%;"></div>
     <div class="welding-spark animate-spark-3" style="top: 5%; right: 25%;"></div>
 
     <div class="container">
-        <div class="system-status-bar">
-            <span class="status-dot"></span>
-            <span class="status-text animate-flicker">SYSTEM READY // VER 2.0.4</span>
+        <div class="system-status-skewed">
+            <div class="system-status-skewed__line"></div>
+            <div class="system-status-skewed__pill">
+                <div class="system-status-skewed__inner">
+                    <div class="system-status-skewed__diamond"></div>
+                    <span class="system-status-skewed__text animate-flicker">System Ready // Ver 2.0.4</span>
+                </div>
+            </div>
         </div>
 
-        <div class="header">
-            <h1>MySQL 8.0 → 8.4 업그레이드 검증기</h1>
-            <p>mysqlsh dump 폴더를 선택하여 호환성 문제를 사전에 발견하세요</p>
+        <div class="header" style="text-align:center;margin-bottom:64px;position:relative;">
+            <div style="position:absolute;top:50%;left:0;width:20%;height:2px;background:linear-gradient(to right,transparent,#1f2937);"></div>
+            <div style="position:absolute;top:50%;right:0;width:20%;height:2px;background:linear-gradient(to left,transparent,#1f2937);"></div>
+            <h1 style="font-size:clamp(48px,7vw,72px);font-weight:700;font-family:'Rajdhani',sans-serif;letter-spacing:-0.02em;margin-bottom:8px;color:white;display:inline-block;position:relative;">
+                <span style="background:linear-gradient(to bottom,#f1f5f9,#4b5563);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;filter:drop-shadow(0 4px 10px rgba(0,0,0,0.8));">
+                    MySQL 8.0 <span style="color:rgba(0,240,255,0.8);font-weight:300;font-size:0.7em;vertical-align:middle;-webkit-text-fill-color:rgba(0,240,255,0.8);">&gt;&gt;</span> 8.4
+                </span>
+                <div style="position:absolute;right:-16px;top:-16px;font-size:10px;color:#4b5563;font-family:'JetBrains Mono',monospace;transform:rotate(90deg);transform-origin:bottom left;">ID: MS-UPG-V8</div>
+            </h1>
+            <div style="display:flex;align-items:center;justify-content:center;margin-top:16px;">
+                <div style="height:1px;width:64px;background:linear-gradient(to right,transparent,rgba(0,240,255,0.5));"></div>
+                <span style="padding:0 16px;font-size:clamp(16px,2vw,22px);color:#9ca3af;letter-spacing:0.2em;text-transform:uppercase;text-shadow:0 0 10px rgba(0,240,255,0.5);font-family:'Rajdhani',sans-serif;">업그레이드 검증기</span>
+                <div style="height:1px;width:64px;background:linear-gradient(to left,transparent,rgba(0,240,255,0.5));"></div>
+            </div>
+            <p style="color:#64748b;font-size:12px;font-family:'JetBrains Mono',monospace;max-width:512px;margin:32px auto 0;background:rgba(0,0,0,0.6);padding:12px 24px;border-left:2px solid rgba(255,255,255,0.1);border-right:2px solid rgba(255,255,255,0.1);display:inline-flex;align-items:center;gap:12px;">
+                <span style="color:#00f0ff;animation:pulse 2s infinite;">&#9618;</span>
+                <span style="letter-spacing:0.1em;text-transform:uppercase;font-size:10px;color:#4b5563;">CMD:</span>
+                <span>mysqlsh dump 폴더를 선택하여 호환성 문제를 사전에 발견하세요</span>
+            </p>
         </div>
 
         <!-- Tab Navigation -->
@@ -30,39 +54,108 @@
             <div class="bolt bolt-tr"></div>
             <div class="bolt bolt-bl"></div>
             <div class="bolt bolt-br"></div>
-            <button class="tab-btn active" data-tab="dump-analysis">
+            <button class="tab-btn active" data-tab="dump-analysis" style="position:relative;overflow:hidden;">
+                <div style="position:absolute;left:0;top:0;bottom:0;width:4px;background:#00f0ff;box-shadow:0 0 15px rgba(0,240,255,0.6);"></div>
                 <span class="tab-code">MD-01</span>
+                <span class="material-symbols-outlined" style="font-size:18px;color:#00f0ff;margin-right:8px;text-shadow:0 0 10px cyan;vertical-align:middle;">memory</span>
                 덤프 분석
+                <span style="position:absolute;right:8px;top:8px;font-size:9px;color:rgba(0,240,255,0.4);font-family:'JetBrains Mono',monospace;letter-spacing:0.15em;">// ACT</span>
             </button>
-            <button class="tab-btn" data-tab="server-query">
+            <button class="tab-btn" data-tab="server-query" style="position:relative;overflow:hidden;">
                 <span class="tab-code">MD-02</span>
+                <span class="material-symbols-outlined" style="font-size:18px;opacity:0.5;margin-right:8px;vertical-align:middle;">terminal</span>
                 서버 쿼리
             </button>
-            <button class="tab-btn" data-tab="check-guide">
+            <button class="tab-btn" data-tab="check-guide" style="position:relative;overflow:hidden;">
                 <span class="tab-code">MD-03</span>
+                <span class="material-symbols-outlined" style="font-size:18px;opacity:0.5;margin-right:8px;vertical-align:middle;">rule</span>
                 검사 항목 안내
             </button>
         </div>
 
         <!-- Tab: Dump Analysis -->
         <div class="tab-content active" id="tab-dump-analysis">
-            <div class="upload-section" id="uploadSection">
-                <div class="bolt bolt-tl" style="width:12px;height:12px;border:1px solid #3a3a45;"></div>
-                <div class="bolt bolt-tr" style="width:12px;height:12px;border:1px solid #3a3a45;"></div>
-                <div class="bolt bolt-bl" style="width:12px;height:12px;border:1px solid #3a3a45;"></div>
-                <div class="bolt bolt-br" style="width:12px;height:12px;border:1px solid #3a3a45;"></div>
-                <div class="corner-bracket-tl"></div>
-                <div class="corner-bracket-tr"></div>
-                <div class="corner-bracket-bl"></div>
-                <div class="corner-bracket-br"></div>
-                <div class="hazard-stripe" style="position:absolute;top:0;left:0;right:0;height:4px;border-bottom:1px solid #000;"></div>
-                <div class="hazard-stripe" style="position:absolute;bottom:0;left:0;right:0;height:4px;border-top:1px solid #000;"></div>
-                <div class="upload-status-label">UNIT: DIAGNOSTIC_BAY &nbsp;|&nbsp; STATUS: IDLE // AWAITING_DATA</div>
-                <div class="upload-content">
-                    <div class="upload-icon">📁</div>
-                    <h2>mysqlsh dump 폴더를 선택하세요</h2>
-                    <p class="upload-subtitle">시스템이 폴더를 스캔하여 분석 파일을 자동 감지합니다</p>
-                    <div class="supported-formats">
+            <div class="upload-section" id="uploadSection" style="position:relative;min-height:500px;background:#0c0c10;border:2px solid #1a1a20;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:0;overflow:hidden;">
+                <!-- overlays -->
+                <div class="scanlines"></div>
+                <div class="metal-grate-overlay"></div>
+                <div class="vignette-overlay"></div>
+                <!-- hazard stripes top/bottom -->
+                <div class="hazard-stripe" style="position:absolute;top:0;left:0;right:0;height:16px;opacity:0.6;z-index:20;"></div>
+                <div class="hazard-stripe" style="position:absolute;bottom:0;left:0;right:0;height:16px;opacity:0.6;z-index:20;"></div>
+                <!-- side rails -->
+                <div class="upload-side-rail upload-side-rail--left">
+                    <div class="upload-side-rail__indicator"></div>
+                    <div class="upload-side-rail__indicator"></div>
+                    <div class="upload-side-rail__indicator"></div>
+                </div>
+                <div class="upload-side-rail upload-side-rail--right">
+                    <div class="upload-side-rail__indicator"></div>
+                    <div class="upload-side-rail__indicator"></div>
+                    <div class="upload-side-rail__indicator"></div>
+                </div>
+                <!-- large corner bolts -->
+                <div class="bolt-lg bolt-lg-tl"></div>
+                <div class="bolt-lg bolt-lg-tr"></div>
+                <div class="bolt-lg bolt-lg-bl"></div>
+                <div class="bolt-lg bolt-lg-br"></div>
+                <!-- corner brackets -->
+                <div class="corner-bracket-tl" style="top:24px;left:24px;width:80px;height:80px;"></div>
+                <div class="corner-bracket-tr" style="top:24px;right:24px;width:80px;height:80px;"></div>
+                <div class="corner-bracket-bl" style="bottom:24px;left:24px;width:80px;height:80px;"></div>
+                <div class="corner-bracket-br" style="bottom:24px;right:24px;width:80px;height:80px;"></div>
+                <!-- diagnostic labels -->
+                <div class="upload-panel-status">
+                    <div class="upload-panel-status__unit">UNIT: DIAGNOSTIC_CORE_01</div>
+                    <div class="upload-panel-status__state">
+                        <div class="upload-panel-status__dot"></div>
+                        STATUS: AWAITING_INPUT
+                    </div>
+                </div>
+                <div class="upload-panel-temp">
+                    <div class="upload-panel-temp__bars">
+                        TEMP: 34&#176;C
+                        <div class="upload-panel-temp__bar" style="height:12px;"></div>
+                        <div class="upload-panel-temp__bar" style="height:12px;"></div>
+                        <div class="upload-panel-temp__bar" style="height:8px;opacity:0.4;"></div>
+                    </div>
+                    <div class="upload-panel-temp__power">POWER: STABLE</div>
+                </div>
+
+                <!-- main content -->
+                <div style="position:relative;z-index:10;display:flex;flex-direction:column;align-items:center;max-width:448px;margin:0 auto;padding:48px 0;">
+                    <!-- spinning rings + icon -->
+                    <div class="spin-ring-container">
+                        <div class="spin-ring spin-ring--dashed"></div>
+                        <div class="spin-ring spin-ring--cyan"></div>
+                        <div class="spin-ring spin-ring--amber"></div>
+                        <div class="spin-ring-glow"></div>
+                        <div class="spin-ring-core">
+                            <span class="spin-ring-core__icon">settings_motion_mode</span>
+                            <div class="spin-ring-core__bar-container">
+                                <div class="spin-ring-core__bar"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- init card -->
+                    <div class="init-card">
+                        <div class="init-card__corner init-card__corner--tl"></div>
+                        <div class="init-card__corner init-card__corner--tr"></div>
+                        <div class="init-card__corner init-card__corner--bl"></div>
+                        <div class="init-card__corner init-card__corner--br"></div>
+                        <div class="init-card__title">Initialize Data Stream</div>
+                        <div class="init-card__target">
+                            <span class="init-card__target-label">Target:</span>
+                            <span class="init-card__target-value">[ MYSQLSH DUMP DIRECTORY ]</span>
+                        </div>
+                        <div class="init-card__desc">
+                            <span class="init-card__desc-arrow">&gt;&gt;</span>시스템이 폴더 전체를 스캔하여 분석 파일을 자동 감지합니다.
+                        </div>
+                    </div>
+
+                    <!-- supported formats -->
+                    <div class="supported-formats" style="margin-top:20px;width:100%;max-width:448px;">
                         <div class="format-item">
                             <span class="format-ext">.sql</span>
                             <span class="format-desc">mysqldump / mysqlsh — 스키마, 쿼리, FK, 예약어 등 대부분의 검사</span>
@@ -80,17 +173,46 @@
                             <span class="format-desc">mysqlsh 전용 — 4-byte UTF-8 데이터 검사 (선택)</span>
                         </div>
                     </div>
-                    <button class="btn btn-primary" onclick="selectFolder()" style="margin-top: 20px;">
-                        폴더 선택
-                    </button>
+
+                    <!-- ENGAGE SELECTOR button -->
+                    <div class="btn-engage-wrapper">
+                        <div class="btn-engage-bg"></div>
+                        <div class="btn-engage-hazard btn-engage-hazard--left">
+                            <div class="btn-engage-hazard__line"></div>
+                            <div class="btn-engage-hazard__line"></div>
+                            <div class="btn-engage-hazard__line"></div>
+                        </div>
+                        <button class="btn-engage" onclick="selectFolder()">
+                            <div class="btn-engage__inset"></div>
+                            <div class="btn-engage__gradient"></div>
+                            <div class="btn-engage__inner">
+                                <span class="btn-engage__icon">settings_power</span>
+                                <div class="btn-engage__text-block">
+                                    <span class="btn-engage__label">ENGAGE SELECTOR</span>
+                                    <span class="btn-engage__sub">폴더 선택 (SELECT)</span>
+                                </div>
+                            </div>
+                        </button>
+                        <div class="btn-engage-hazard btn-engage-hazard--right">
+                            <div class="btn-engage-hazard__line"></div>
+                            <div class="btn-engage-hazard__line"></div>
+                            <div class="btn-engage-hazard__line"></div>
+                        </div>
+                    </div>
                 </div>
-            </div>
-            <div class="scan-bar-container">
-                <div class="scan-bar-fill"></div>
-            </div>
-            <div class="scan-bar-labels">
-                <span>SYS_CHECK: RUNNING</span>
-                <span>BUFFER: CLEAR</span>
+
+                <!-- status panel at bottom of upload box -->
+                <div class="upload-status-panel" style="position:absolute;bottom:16px;left:0;right:0;height:24px;">
+                    <div class="upload-status-panel__scan"></div>
+                    <div class="upload-status-panel__left">
+                        <div class="upload-status-panel__indicator">
+                            <div class="upload-status-panel__dot-green"></div>
+                            Sys_Check: Running
+                        </div>
+                        <span style="display:none;" class="hidden-md">Mem_Alloc: 64MB</span>
+                    </div>
+                    <div class="upload-status-panel__right">Buffer: Clear</div>
+                </div>
             </div>
         </div>
 
