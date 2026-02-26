@@ -49,6 +49,7 @@ export const REMOVED_SYS_VARS_84 = [
   'new',
   'old',
   'old_style_user_limits',
+  'relay_log_info_file',
   'relay_log_info_repository',
   'show_old_temporals',
   'slave_rows_search_algorithms',
@@ -72,7 +73,7 @@ export const SYS_VARS_NEW_DEFAULTS_84 = {
   'innodb_log_buffer_size': [16777216, 67108864, '로그 버퍼 크기'],
   'innodb_redo_log_capacity': [104857600, 419430400, 'Redo 로그 용량'],
   'innodb_change_buffering': ['all', 'none', 'Change Buffering'],
-  'binlog_transaction_dependency_tracking': ['COMMIT_ORDER', 'WRITESET', '트랜잭션 의존성 추적']
+  'group_replication_consistency': ['EVENTUAL', 'BEFORE_ON_PRIMARY_FAILOVER', 'Group Replication 트랜잭션 일관성']
 } as const;
 
 // ============================================================================
@@ -116,14 +117,18 @@ export const REMOVED_FUNCTIONS_84 = [
 ] as const;
 
 // Deprecated functions (not yet removed)
+// Note: SQL_CALC_FOUND_ROWS is excluded here as it is already handled by the
+// dedicated 'sql_calc_found_rows' rule to avoid duplicate warnings.
 export const DEPRECATED_FUNCTIONS_84 = [
   'FOUND_ROWS',
-  'SQL_CALC_FOUND_ROWS'
+  'MASTER_POS_WAIT'
 ] as const;
 
 // ============================================================================
 // 6. OBSOLETE SQL MODES
 // ============================================================================
+// SQL modes removed in MySQL 8.0 (will cause ERROR 1231 if present in config files or dump files)
+// All entries were removed in MySQL 8.0 GA release window (8.0.0-8.0.11)
 export const OBSOLETE_SQL_MODES = [
   'DB2',
   'MAXDB',
@@ -132,6 +137,7 @@ export const OBSOLETE_SQL_MODES = [
   'MYSQL40',
   'ORACLE',
   'POSTGRESQL',
+  'NO_AUTO_CREATE_USER',
   'NO_FIELD_OPTIONS',
   'NO_KEY_OPTIONS',
   'NO_TABLE_OPTIONS'
@@ -385,16 +391,7 @@ SELECT
   VARIABLE_VALUE
 FROM performance_schema.global_variables
 WHERE VARIABLE_NAME IN (
-  'replica_parallel_workers',
-  'innodb_adaptive_hash_index',
-  'innodb_doublewrite_pages',
-  'innodb_flush_method',
-  'innodb_io_capacity',
-  'innodb_io_capacity_max',
-  'innodb_log_buffer_size',
-  'innodb_redo_log_capacity',
-  'innodb_change_buffering',
-  'binlog_transaction_dependency_tracking'
+${Object.keys(SYS_VARS_NEW_DEFAULTS_84).map(k => `  '${k}'`).join(',\n')}
 );`;
 
 // ============================================================================

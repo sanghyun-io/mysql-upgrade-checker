@@ -115,7 +115,7 @@ Identifies system variables with changed defaults that may affect application be
 | `innodb_doublewrite_pages` | - | 128 | Doublewrite pages count |
 | `innodb_log_buffer_size` | 16MB | 64MB | Log buffer size |
 | `innodb_redo_log_capacity` | 100MB | 400MB | Redo log capacity |
-| `binlog_transaction_dependency_tracking` | COMMIT_ORDER | WRITESET | Transaction dependency |
+| `group_replication_consistency` | EVENTUAL | BEFORE_ON_PRIMARY_FAILOVER | Group Replication transaction consistency |
 
 ### 3. Authentication & Privileges
 

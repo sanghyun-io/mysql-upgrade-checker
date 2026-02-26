@@ -170,14 +170,22 @@ export const invalidObjectsRules: CompatibilityRule[] = [
     id: 'deprecated_function_84',
     type: 'query',
     category: 'invalidObjects',
-    pattern: new RegExp(`\\b(${DEPRECATED_FUNCTIONS_84.join('|')})\\s*\\(`, 'gi'),
+    pattern: new RegExp(`\\b(${DEPRECATED_FUNCTIONS_84.join('|')})\\b`, 'gi'),
     severity: 'warning',
     title: 'Deprecated 함수 사용',
     description: `다음 함수는 MySQL 8.4에서 deprecated되었습니다: ${DEPRECATED_FUNCTIONS_84.join(', ')}`,
-    suggestion: 'FOUND_ROWS() 대신 COUNT 쿼리를 별도로 실행하세요.',
+    suggestion: 'FOUND_ROWS() → COUNT(*) 쿼리로 대체, MASTER_POS_WAIT() → SOURCE_POS_WAIT()로 대체하세요.',
     mysqlShellCheckId: 'removedFunctions',
     docLink: 'https://dev.mysql.com/doc/refman/8.4/en/information-functions.html',
-    generateFixQuery: () => {
+    generateFixQuery: (context) => {
+      const code = context.code ?? '';
+      if (/\bMASTER_POS_WAIT\b/i.test(code)) {
+        return [
+          `-- MASTER_POS_WAIT()는 MySQL 8.4에서 deprecated되었습니다.`,
+          `-- SOURCE_POS_WAIT()로 교체하세요:`,
+          `-- SELECT SOURCE_POS_WAIT(log_name, log_pos, timeout);`
+        ].join('\n');
+      }
       return [
         `-- SQL_CALC_FOUND_ROWS와 FOUND_ROWS() 대신:`,
         `-- 1. 데이터 조회 쿼리`,
@@ -189,7 +197,7 @@ export const invalidObjectsRules: CompatibilityRule[] = [
     }
   },
 
-  // Obsolete SQL Modes
+  // Obsolete SQL Modes (config files)
   {
     id: 'obsolete_sql_mode',
     type: 'config',
@@ -200,6 +208,26 @@ export const invalidObjectsRules: CompatibilityRule[] = [
     description: `다음 SQL 모드는 MySQL 8.4에서 제거되었습니다: ${OBSOLETE_SQL_MODES.join(', ')}`,
     suggestion: '해당 SQL 모드를 설정에서 제거하세요.',
     mysqlShellCheckId: 'obsoleteSqlModeFlags'
+  },
+
+  // Obsolete SQL Modes in SQL dump files (SET sql_mode = '...' statements)
+  // Handles common mysqldump output forms:
+  //   SET sql_mode='...'
+  //   SET @@SESSION.sql_mode='...'
+  //   SET @OLD_SQL_MODE=@@SQL_MODE, SQL_MODE='...'
+  {
+    id: 'obsolete_sql_mode_in_dump',
+    type: 'query',
+    category: 'invalidObjects',
+    pattern: new RegExp(
+      `(?:SET\\s+(?:@@(?:(?:SESSION|GLOBAL)\\.)?|@\\w+\\s*=\\s*@@\\w+\\s*,\\s*)?sql_mode\\s*=\\s*)['"][^'"]*\\b(${OBSOLETE_SQL_MODES.join('|')})\\b[^'"]*['"]`,
+      'gi'
+    ),
+    severity: 'error',
+    title: '덤프 파일 내 폐기된 SQL 모드',
+    description: `SET sql_mode 구문에 MySQL 8.0에서 제거된 SQL 모드가 포함되어 있습니다: ${OBSOLETE_SQL_MODES.join(', ')}`,
+    suggestion: '해당 SQL 모드를 SET sql_mode 구문에서 제거하세요. 이 모드들은 MySQL 8.0부터 ERROR 1231을 유발합니다.',
+    mysqlShellCheckId: 'obsoleteSqlModeFlags_dump'
   },
 
   // GROUP BY ASC/DESC Syntax

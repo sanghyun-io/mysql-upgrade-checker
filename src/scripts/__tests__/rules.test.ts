@@ -8,6 +8,7 @@ import { compatibilityRules, rulesByCategory } from '../rules';
 import {
   REMOVED_SYS_VARS_84,
   SYS_VARS_NEW_DEFAULTS_84,
+  SYSVAR_CHECK_QUERY,
   NEW_RESERVED_KEYWORDS_84,
   REMOVED_FUNCTIONS_84
 } from '../constants';
@@ -69,24 +70,14 @@ describe('Removed System Variables Rules', () => {
     expect(testPatternMatch('removed_sys_var', 'max_connections=100')).toBe(false);
   });
 
-  it('should detect all removed system variables', () => {
-    // Test a sample of removed variables
-    const sampleVars = [
-      'avoid_temporal_upgrade',
-      'binlog_transaction_dependency_tracking',
-      'expire_logs_days',
-      'innodb_log_file_size',
-      'innodb_log_files_in_group',
-      'keyring_file_data',
-      'language',
-      'log_bin_use_v1_row_events',
-      'old',
-      'new',
-      'show_old_temporals'
-    ];
-
-    for (const varName of sampleVars) {
-      expect(testPatternMatch('removed_sys_var', `${varName}=value`)).toBe(true);
+  it('should detect all removed system variables (exhaustive)', () => {
+    // Iterate ALL entries in REMOVED_SYS_VARS_84 so that any typo or accidental
+    // deletion of an entry causes this test to fail immediately.
+    for (const varName of REMOVED_SYS_VARS_84) {
+      expect(
+        testPatternMatch('removed_sys_var', `${varName}=value`),
+        `Expected removed_sys_var rule to detect: ${varName}`
+      ).toBe(true);
     }
   });
 
@@ -646,8 +637,22 @@ describe('Invalid Objects Rules', () => {
       expect(testPatternMatch('deprecated_function_84', 'SELECT FOUND_ROWS()')).toBe(true);
     });
 
-    it('should detect SQL_CALC_FOUND_ROWS in query', () => {
-      expect(testPatternMatch('deprecated_function_84', 'SELECT SQL_CALC_FOUND_ROWS() FROM users')).toBe(true);
+    it('should NOT detect SQL_CALC_FOUND_ROWS (handled by dedicated sql_calc_found_rows rule)', () => {
+      // SQL_CALC_FOUND_ROWS is excluded from DEPRECATED_FUNCTIONS_84 to prevent
+      // duplicate warnings when both rules would otherwise match the same token.
+      expect(testPatternMatch('deprecated_function_84', 'SELECT SQL_CALC_FOUND_ROWS * FROM users')).toBe(false);
+    });
+
+    it('sql_calc_found_rows rule should still detect SQL_CALC_FOUND_ROWS', () => {
+      expect(testPatternMatch('sql_calc_found_rows', 'SELECT SQL_CALC_FOUND_ROWS * FROM users')).toBe(true);
+    });
+
+    it('should detect MASTER_POS_WAIT with arguments', () => {
+      expect(testPatternMatch('deprecated_function_84', 'SELECT MASTER_POS_WAIT(log_name, pos)')).toBe(true);
+    });
+
+    it('should detect bare MASTER_POS_WAIT without parenthesis', () => {
+      expect(testPatternMatch('deprecated_function_84', 'MASTER_POS_WAIT')).toBe(true);
     });
 
     it('should have warning severity', () => {
@@ -660,11 +665,17 @@ describe('Invalid Objects Rules', () => {
       expect(rule?.category).toBe('invalidObjects');
     });
 
-    it('should generate fix query with alternative approach', () => {
+    it('should generate fix query with FOUND_ROWS alternative (COUNT)', () => {
       const rule = compatibilityRules.find(r => r.id === 'deprecated_function_84');
-      const fix = rule?.generateFixQuery?.({});
+      const fix = rule?.generateFixQuery?.({ code: 'SELECT FOUND_ROWS()' });
       expect(fix).toContain('SQL_CALC_FOUND_ROWS');
       expect(fix).toContain('COUNT(*)');
+    });
+
+    it('should generate fix query mentioning SOURCE_POS_WAIT for MASTER_POS_WAIT', () => {
+      const rule = compatibilityRules.find(r => r.id === 'deprecated_function_84');
+      const fix = rule?.generateFixQuery?.({ code: 'SELECT MASTER_POS_WAIT(log_name, pos)' });
+      expect(fix).toContain('SOURCE_POS_WAIT');
     });
   });
 
@@ -679,6 +690,76 @@ describe('Invalid Objects Rules', () => {
 
     it('should detect DB2 SQL mode', () => {
       expect(testPatternMatch('obsolete_sql_mode', 'sql_mode=DB2')).toBe(true);
+    });
+
+    it('should detect NO_AUTO_CREATE_USER SQL mode in config file', () => {
+      expect(testPatternMatch('obsolete_sql_mode', 'sql_mode=STRICT_TRANS_TABLES,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION')).toBe(true);
+    });
+
+    it('should detect NO_AUTO_CREATE_USER alone in config file', () => {
+      expect(testPatternMatch('obsolete_sql_mode', 'sql_mode=NO_AUTO_CREATE_USER')).toBe(true);
+    });
+  });
+
+  describe('Obsolete SQL modes in SQL dump files', () => {
+    it('should detect NO_AUTO_CREATE_USER in SET sql_mode statement', () => {
+      expect(testPatternMatch('obsolete_sql_mode_in_dump',
+        "SET sql_mode='STRICT_TRANS_TABLES,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION'")).toBe(true);
+    });
+
+    it('should detect DB2 in SET sql_mode statement', () => {
+      expect(testPatternMatch('obsolete_sql_mode_in_dump',
+        "SET sql_mode='STRICT_TRANS_TABLES,DB2'")).toBe(true);
+    });
+
+    it('should detect ORACLE in SET sql_mode with double quotes', () => {
+      expect(testPatternMatch('obsolete_sql_mode_in_dump',
+        'SET sql_mode="STRICT_TRANS_TABLES,ORACLE"')).toBe(true);
+    });
+
+    it('should detect MAXDB in SET sql_mode with spaces around equals', () => {
+      expect(testPatternMatch('obsolete_sql_mode_in_dump',
+        "SET sql_mode = 'STRICT_TRANS_TABLES,MAXDB,NO_ENGINE_SUBSTITUTION'")).toBe(true);
+    });
+
+    it('should NOT match SET sql_mode with only valid modes', () => {
+      expect(testPatternMatch('obsolete_sql_mode_in_dump',
+        "SET sql_mode='STRICT_TRANS_TABLES,NO_ENGINE_SUBSTITUTION'")).toBe(false);
+    });
+
+    it('should detect obsolete mode in @@SESSION.sql_mode form', () => {
+      expect(testPatternMatch('obsolete_sql_mode_in_dump',
+        "SET @@SESSION.sql_mode='STRICT_TRANS_TABLES,NO_AUTO_CREATE_USER'")).toBe(true);
+    });
+
+    it('should detect obsolete mode in @@sql_mode form', () => {
+      expect(testPatternMatch('obsolete_sql_mode_in_dump',
+        "SET @@sql_mode='NO_AUTO_CREATE_USER'")).toBe(true);
+    });
+
+    it('should detect obsolete mode in mysqldump multi-assignment form (no spaces)', () => {
+      // Common in mysqldump output: SET @OLD_SQL_MODE=@@SQL_MODE, SQL_MODE='...';
+      expect(testPatternMatch('obsolete_sql_mode_in_dump',
+        "SET @OLD_SQL_MODE=@@SQL_MODE, SQL_MODE='NO_AUTO_CREATE_USER,STRICT_TRANS_TABLES'")).toBe(true);
+    });
+
+    it('should detect obsolete mode in mysqldump multi-assignment form (with spaces)', () => {
+      // Formatter-altered: SET @OLD_SQL_MODE = @@SQL_MODE, SQL_MODE='...';
+      expect(testPatternMatch('obsolete_sql_mode_in_dump',
+        "SET @OLD_SQL_MODE = @@SQL_MODE, SQL_MODE='NO_AUTO_CREATE_USER'")).toBe(true);
+    });
+
+    it('should detect obsolete mode in @@GLOBAL.sql_mode form', () => {
+      expect(testPatternMatch('obsolete_sql_mode_in_dump',
+        "SET @@GLOBAL.sql_mode='STRICT_TRANS_TABLES,DB2'")).toBe(true);
+    });
+
+    it('should have correct rule metadata', () => {
+      const rule = compatibilityRules.find(r => r.id === 'obsolete_sql_mode_in_dump');
+      expect(rule?.type).toBe('query');
+      expect(rule?.category).toBe('invalidObjects');
+      expect(rule?.severity).toBe('error');
+      expect(rule?.mysqlShellCheckId).toBe('obsoleteSqlModeFlags_dump');
     });
   });
 
@@ -1025,5 +1106,31 @@ describe('Constants Validation', () => {
     expect(REMOVED_FUNCTIONS_84.length).toBeGreaterThan(0);
     expect(REMOVED_FUNCTIONS_84).toContain('PASSWORD');
     expect(REMOVED_FUNCTIONS_84).toContain('ENCRYPT');
+  });
+});
+
+// ============================================================================
+// CONTRACT TESTS: SYS_VARS_NEW_DEFAULTS_84 and SYSVAR_CHECK_QUERY
+// ============================================================================
+
+describe('SYS_VARS_NEW_DEFAULTS_84 contract tests', () => {
+  it('should contain group_replication_consistency with correct values', () => {
+    const entry = SYS_VARS_NEW_DEFAULTS_84['group_replication_consistency'];
+    expect(entry).toBeDefined();
+    expect(entry[0]).toBe('EVENTUAL');
+    expect(entry[1]).toBe('BEFORE_ON_PRIMARY_FAILOVER');
+    expect(entry[2]).toBe('Group Replication 트랜잭션 일관성');
+  });
+
+  it('should NOT contain binlog_transaction_dependency_tracking (regression guard)', () => {
+    const keys = Object.keys(SYS_VARS_NEW_DEFAULTS_84);
+    expect(keys).not.toContain('binlog_transaction_dependency_tracking');
+  });
+
+  it('SYSVAR_CHECK_QUERY should contain all keys from SYS_VARS_NEW_DEFAULTS_84', () => {
+    const keys = Object.keys(SYS_VARS_NEW_DEFAULTS_84);
+    for (const key of keys) {
+      expect(SYSVAR_CHECK_QUERY).toContain(`'${key}'`);
+    }
   });
 });
